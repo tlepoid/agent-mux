@@ -122,6 +122,9 @@ type App struct {
 	tmuxActivityRescanPending bool
 	tmuxActivitySettled       bool
 	tmuxActivitySettledScans  int
+	tmuxActivityScannerOwner  bool
+	tmuxActivityOwnershipSet  bool
+	tmuxActivityOwnerEpoch    int64
 	tmuxOptions               tmux.Options
 	tmuxAvailable             bool
 	tmuxCheckDone             bool
@@ -129,7 +132,7 @@ type App struct {
 	tmuxInstallHint           string
 	tmuxActiveWorkspaceIDs    map[string]bool
 	sessionActivityStates     map[string]*activity.SessionState // Per-session hysteresis state
-	instanceID                string
+	instanceID                string                            // Immutable after init; safe for read-only access from Cmd goroutines.
 	lastTerminalGCRun         time.Time
 
 	// Workspace persistence debounce

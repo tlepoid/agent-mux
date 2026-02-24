@@ -21,6 +21,7 @@ func FetchTaggedSessions(svc SessionFetcher, infoBySession map[string]SessionInf
 		"@amux_type",
 		tmux.TagLastOutputAt,
 		tmux.TagLastInputAt,
+		tmux.TagSessionLeaseAt,
 	}
 	rows, err := svc.SessionsWithTags(nil, keys, opts)
 	if err != nil {
@@ -47,6 +48,16 @@ func FetchTaggedSessions(svc SessionFetcher, infoBySession map[string]SessionInf
 		}
 		lastOutputAt, ok := ParseLastOutputAtTag(row.Tags[tmux.TagLastOutputAt])
 		lastInputAt, hasInput := ParseLastOutputAtTag(row.Tags[tmux.TagLastInputAt])
+		if !ok && !hasInput {
+			// Lease is refreshed on both input and output events; treat it as a
+			// compatibility fallback when explicit output tags are absent.
+			// TODO: retire this fallback after all active sessions reliably write
+			// explicit input/output tags.
+			if leaseAt, leaseOK := ParseLastOutputAtTag(row.Tags[tmux.TagSessionLeaseAt]); leaseOK {
+				lastOutputAt = leaseAt
+				ok = true
+			}
+		}
 		sessions = append(sessions, TaggedSession{
 			Session:       session,
 			LastOutputAt:  lastOutputAt,

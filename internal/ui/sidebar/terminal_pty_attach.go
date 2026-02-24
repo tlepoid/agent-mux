@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -43,12 +44,14 @@ func (m *TerminalModel) createTerminalTab(ws *data.Workspace) tea.Cmd {
 			scrollback, _ = tmux.CapturePane(sessionName, opts)
 		}
 		tags := tmux.SessionTags{
-			WorkspaceID: wsID,
-			TabID:       string(tabID),
-			Type:        "terminal",
-			Assistant:   "terminal",
-			CreatedAt:   time.Now().Unix(),
-			InstanceID:  instanceID,
+			WorkspaceID:  wsID,
+			TabID:        string(tabID),
+			Type:         "terminal",
+			Assistant:    "terminal",
+			CreatedAt:    time.Now().Unix(),
+			InstanceID:   instanceID,
+			SessionOwner: instanceID,
+			LeaseAtMS:    time.Now().UnixMilli(),
 		}
 		command := tmux.NewClientCommand(sessionName, tmux.ClientCommandParams{
 			WorkDir:        root,
@@ -178,11 +181,13 @@ func (m *TerminalModel) attachToSession(ws *data.Workspace, tabID TerminalTabID,
 			}
 		}
 		tags := tmux.SessionTags{
-			WorkspaceID: wsID,
-			TabID:       string(tabID),
-			Type:        "terminal",
-			Assistant:   "terminal",
-			InstanceID:  instanceID,
+			WorkspaceID:  wsID,
+			TabID:        string(tabID),
+			Type:         "terminal",
+			Assistant:    "terminal",
+			InstanceID:   instanceID,
+			SessionOwner: instanceID,
+			LeaseAtMS:    time.Now().UnixMilli(),
 		}
 		if action == "restart" {
 			tags.CreatedAt = time.Now().Unix()
@@ -305,17 +310,31 @@ func terminalTagChecks(tags tmux.SessionTags) []struct {
 			want string
 		}{key: "@amux_assistant", want: strings.TrimSpace(tags.Assistant)})
 	}
+	// CreatedAt is optional for reattach paths; SessionOwner/LeaseAtMS remain the
+	// primary freshness/ownership tags for those sessions.
 	if tags.CreatedAt > 0 {
 		checks = append(checks, struct {
 			key  string
 			want string
-		}{key: "@amux_created_at", want: fmt.Sprintf("%d", tags.CreatedAt)})
+		}{key: "@amux_created_at", want: strconv.FormatInt(tags.CreatedAt, 10)})
 	}
 	if strings.TrimSpace(tags.InstanceID) != "" {
 		checks = append(checks, struct {
 			key  string
 			want string
 		}{key: "@amux_instance", want: strings.TrimSpace(tags.InstanceID)})
+	}
+	if strings.TrimSpace(tags.SessionOwner) != "" {
+		checks = append(checks, struct {
+			key  string
+			want string
+		}{key: tmux.TagSessionOwner, want: strings.TrimSpace(tags.SessionOwner)})
+	}
+	if tags.LeaseAtMS > 0 {
+		checks = append(checks, struct {
+			key  string
+			want string
+		}{key: tmux.TagSessionLeaseAt, want: strconv.FormatInt(tags.LeaseAtMS, 10)})
 	}
 	return checks
 }

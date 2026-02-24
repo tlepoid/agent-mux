@@ -28,12 +28,14 @@ type SessionState struct {
 }
 
 type SessionTags struct {
-	WorkspaceID string
-	TabID       string
-	Type        string
-	Assistant   string
-	CreatedAt   int64 // Unix seconds for fresh create/restart; may be zero for reattach.
-	InstanceID  string
+	WorkspaceID  string
+	TabID        string
+	Type         string
+	Assistant    string
+	CreatedAt    int64 // Unix seconds for fresh create/restart; may be zero for reattach.
+	InstanceID   string
+	SessionOwner string
+	LeaseAtMS    int64
 }
 
 const tmuxCommandTimeout = 5 * time.Second
@@ -319,6 +321,120 @@ func SessionTagValue(sessionName, key string, opts Options) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(output)), nil
+}
+
+// GlobalOptionValue returns a tmux global option value for the given key.
+// Missing options return an empty value with nil error, while connection
+// failures (for example, no running server) are returned as errors.
+// Unlike SetGlobalOptionValue, read paths do not suppress generic command
+// errors because callers rely on these failures for ownership/coordination
+// fallback decisions.
+func GlobalOptionValue(key string, opts Options) (string, error) {
+	if strings.TrimSpace(key) == "" {
+		return "", nil
+	}
+	if err := EnsureAvailable(); err != nil {
+		return "", err
+	}
+	cmd, cancel := tmuxCommand(opts, "show-options", "-g", "-v", key)
+	defer cancel()
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			if exitErr.ExitCode() == 1 && tmuxShowOptionMissingError(string(output)) {
+				return "", nil
+			}
+			if exitErr.ExitCode() == 1 {
+				stderr := strings.TrimSpace(string(output))
+				return "", fmt.Errorf("show-options -g %s: %s", key, stderr)
+			}
+		}
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+func tmuxShowOptionMissingError(stderr string) bool {
+	message := strings.ToLower(strings.TrimSpace(stderr))
+	return strings.Contains(message, "invalid option") || strings.Contains(message, "unknown option")
+}
+
+// OptionValue represents a tmux option key/value pair.
+type OptionValue struct {
+	Key   string
+	Value string
+}
+
+// SetGlobalOptionValue sets a tmux global option value.
+func SetGlobalOptionValue(key, value string, opts Options) error {
+	if strings.TrimSpace(key) == "" {
+		return nil
+	}
+	if err := EnsureAvailable(); err != nil {
+		return err
+	}
+	cmd, cancel := tmuxCommand(opts, "set-option", "-g", key, value)
+	defer cancel()
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			if exitErr.ExitCode() == 1 {
+				stderr := strings.TrimSpace(string(output))
+				// Unknown/invalid options are tolerated on writes for compatibility
+				// with older tmux versions that may not recognize newer keys.
+				if strings.Contains(stderr, "invalid option") || strings.Contains(stderr, "unknown option") {
+					return nil
+				}
+				return fmt.Errorf("set-option -g %s: %s", key, stderr)
+			}
+		}
+		return err
+	}
+	return nil
+}
+
+// SetGlobalOptionValues sets multiple tmux global options in a single tmux command.
+func SetGlobalOptionValues(values []OptionValue, opts Options) error {
+	if len(values) == 0 {
+		return nil
+	}
+	if err := EnsureAvailable(); err != nil {
+		return err
+	}
+	args := make([]string, 0, len(values)*6)
+	added := 0
+	for _, candidate := range values {
+		key := strings.TrimSpace(candidate.Key)
+		if key == "" {
+			continue
+		}
+		if added > 0 {
+			args = append(args, ";")
+		}
+		args = append(args, "set-option", "-g", key, candidate.Value)
+		added++
+	}
+	if added == 0 {
+		return nil
+	}
+	cmd, cancel := tmuxCommand(opts, args...)
+	defer cancel()
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			if exitErr.ExitCode() == 1 {
+				stderr := strings.TrimSpace(string(output))
+				// Keep parity with SetGlobalOptionValue: tolerate unknown/invalid
+				// option keys so mixed tmux versions don't fail batch writes.
+				if strings.Contains(stderr, "invalid option") || strings.Contains(stderr, "unknown option") {
+					return nil
+				}
+				return fmt.Errorf("set-option -g (multi): %s", stderr)
+			}
+		}
+		return err
+	}
+	return nil
 }
 
 func sanitize(value string) string {

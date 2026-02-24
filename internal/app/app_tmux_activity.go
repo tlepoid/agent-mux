@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"strings"
 	"time"
 
@@ -22,6 +23,10 @@ type tmuxActivityResult struct {
 	ActiveWorkspaceIDs map[string]bool
 	UpdatedStates      map[string]*activity.SessionState // Updated hysteresis states to merge
 	StoppedTabs        []messages.TabSessionStatus
+	SkipApply          bool
+	ScannerOwner       bool
+	ScannerEpoch       int64
+	RoleKnown          bool
 	Err                error
 }
 
@@ -73,22 +78,7 @@ func (a *App) scanTmuxActivityNow() tea.Cmd {
 	}
 	svc := a.tmuxService
 	return func() tea.Msg {
-		if svc == nil {
-			return tmuxActivityResult{Token: scanToken, Err: activity.ErrTmuxUnavailable}
-		}
-		sessions, err := activity.FetchTaggedSessions(svc, infoBySession, opts)
-		if err != nil {
-			return tmuxActivityResult{Token: scanToken, Err: err}
-		}
-		// Mutates infoBySession so IsRunningSession sees corrected statuses.
-		stoppedTabs := syncActivitySessionStates(infoBySession, sessions, svc, opts)
-		recentActivityBySession, err := activity.FetchRecentlyActiveByWindow(svc, tmuxActivityPrefilter, opts)
-		if err != nil {
-			logging.Warn("tmux activity prefilter failed; treating prefilter as unavailable for this scan: %v", err)
-			recentActivityBySession = nil
-		}
-		active, updatedStates := activity.ActiveWorkspaceIDsFromTags(infoBySession, sessions, recentActivityBySession, statesSnapshot, opts, svc.CapturePaneTail, svc.ContentHash)
-		return tmuxActivityResult{Token: scanToken, ActiveWorkspaceIDs: active, UpdatedStates: updatedStates, StoppedTabs: stoppedTabs}
+		return a.runTmuxActivityScan(scanToken, infoBySession, statesSnapshot, opts, svc)
 	}
 }
 
@@ -117,67 +107,140 @@ func (a *App) handleTmuxActivityTick(msg tmuxActivityTick) []tea.Cmd {
 	}
 	svc := a.tmuxService
 	cmds := []tea.Cmd{a.scheduleTmuxActivityTick(), func() tea.Msg {
-		if svc == nil {
-			return tmuxActivityResult{Token: scanToken, Err: activity.ErrTmuxUnavailable}
-		}
-		sessions, err := activity.FetchTaggedSessions(svc, sessionInfo, opts)
-		if err != nil {
-			return tmuxActivityResult{Token: scanToken, Err: err}
-		}
-		// Mutates sessionInfo so IsRunningSession sees corrected statuses.
-		stoppedTabs := syncActivitySessionStates(sessionInfo, sessions, svc, opts)
-		recentActivityBySession, err := activity.FetchRecentlyActiveByWindow(svc, tmuxActivityPrefilter, opts)
-		if err != nil {
-			logging.Warn("tmux activity prefilter failed; treating prefilter as unavailable for this scan: %v", err)
-			recentActivityBySession = nil
-		}
-		active, updatedStates := activity.ActiveWorkspaceIDsFromTags(sessionInfo, sessions, recentActivityBySession, statesSnapshot, opts, svc.CapturePaneTail, svc.ContentHash)
-		return tmuxActivityResult{Token: scanToken, ActiveWorkspaceIDs: active, UpdatedStates: updatedStates, StoppedTabs: stoppedTabs}
+		return a.runTmuxActivityScan(scanToken, sessionInfo, statesSnapshot, opts, svc)
 	}}
 	return cmds
 }
 
-func (a *App) handleTmuxActivityResult(msg tmuxActivityResult) []tea.Cmd {
-	if msg.Token != a.tmuxActivityToken {
-		// Stale result from an older scan; ignore to avoid overwriting newer state
-		return nil
+func (a *App) runTmuxActivityScan(
+	scanToken int,
+	infoBySession map[string]activity.SessionInfo,
+	statesSnapshot map[string]*activity.SessionState,
+	opts tmux.Options,
+	svc *tmuxService,
+) tmuxActivityResult {
+	if svc == nil {
+		return tmuxActivityResult{Token: scanToken, Err: activity.ErrTmuxUnavailable}
 	}
-	a.tmuxActivityScanInFlight = false
-	var cmds []tea.Cmd
-	if msg.Err != nil {
-		logging.Warn("tmux activity scan failed: %v", msg.Err)
-	} else {
-		if msg.ActiveWorkspaceIDs == nil {
-			msg.ActiveWorkspaceIDs = make(map[string]bool)
-		}
-		// Merge updated hysteresis states back into the main map (on main thread)
-		for name, state := range msg.UpdatedStates {
-			a.sessionActivityStates[name] = state
-		}
-		if len(msg.StoppedTabs) > 0 {
-			stoppedTabCmds := make([]tea.Cmd, 0, len(msg.StoppedTabs))
-			for _, update := range msg.StoppedTabs {
-				stoppedTabCmds = append(stoppedTabCmds, func() tea.Msg { return update })
+
+	now := time.Now()
+	ownerEpoch := int64(0)
+	sharedRoleKnown := false
+	if a.sharedTmuxActivityEnabled() {
+		role, sharedActive, applyShared, epoch, err := a.resolveTmuxActivityScanRole(opts, now)
+		if err != nil {
+			if !tmux.IsNoServerError(err) {
+				logging.Warn("tmux activity ownership resolution failed; falling back to local scan: %v", err)
 			}
-			cmds = append(cmds, common.SafeBatch(stoppedTabCmds...))
-		}
-		a.tmuxActiveWorkspaceIDs = msg.ActiveWorkspaceIDs
-		a.tmuxActivitySettledScans++
-		if a.tmuxActivitySettledScans >= tmuxActivitySettleScans {
-			a.tmuxActivitySettled = true
-		}
-		a.syncActiveWorkspacesToDashboard()
-		if cmd := a.dashboard.StartSpinnerIfNeeded(); cmd != nil {
-			cmds = append(cmds, cmd)
+		} else if role == tmuxActivityRoleFollower {
+			_, stoppedTabs, syncErr := a.fetchAndSyncActivitySessionStates(infoBySession, opts, svc)
+			if syncErr != nil {
+				logging.Warn("tmux activity follower session-state sync failed: %v", syncErr)
+			}
+			if !applyShared {
+				return tmuxActivityResult{
+					Token:        scanToken,
+					SkipApply:    true,
+					StoppedTabs:  stoppedTabs,
+					ScannerOwner: false,
+					ScannerEpoch: epoch,
+					RoleKnown:    true,
+				}
+			}
+			if sharedActive == nil {
+				sharedActive = make(map[string]bool)
+			}
+			return tmuxActivityResult{
+				Token:              scanToken,
+				ActiveWorkspaceIDs: sharedActive,
+				StoppedTabs:        stoppedTabs,
+				ScannerOwner:       false,
+				ScannerEpoch:       epoch,
+				RoleKnown:          true,
+			}
+		} else {
+			sharedRoleKnown = true
+			ownerEpoch = epoch
 		}
 	}
-	if a.tmuxActivityRescanPending && a.tmuxAvailable {
-		a.tmuxActivityRescanPending = false
-		if scanCmd := a.scanTmuxActivityNow(); scanCmd != nil {
-			cmds = append(cmds, scanCmd)
+
+	sessions, stoppedTabs, err := a.fetchAndSyncActivitySessionStates(infoBySession, opts, svc)
+	if err != nil {
+		return tmuxActivityResult{
+			Token: scanToken,
+			Err:   err,
+			// sharedRoleKnown implies ownership was resolved before local scan work;
+			// keep that role metadata on scan errors so the UI can preserve role state.
+			ScannerOwner: sharedRoleKnown,
+			ScannerEpoch: ownerEpoch,
+			RoleKnown:    sharedRoleKnown,
 		}
 	}
-	return cmds
+	recentActivityBySession, err := activity.FetchRecentlyActiveByWindow(svc, tmuxActivityPrefilter, opts)
+	if err != nil {
+		logging.Warn("tmux activity prefilter failed; using unbounded stale-tag fallback: %v", err)
+		recentActivityBySession = nil
+	}
+	active, updatedStates := activity.ActiveWorkspaceIDsFromTags(infoBySession, sessions, recentActivityBySession, statesSnapshot, opts, svc.CapturePaneTail, svc.ContentHash)
+	result := tmuxActivityResult{
+		Token:              scanToken,
+		ActiveWorkspaceIDs: active,
+		UpdatedStates:      updatedStates,
+		StoppedTabs:        stoppedTabs,
+		ScannerOwner:       true,
+		ScannerEpoch:       ownerEpoch,
+		RoleKnown:          sharedRoleKnown,
+	}
+	if sharedRoleKnown {
+		if result.ScannerEpoch <= 0 {
+			result.ScannerEpoch = 1
+		}
+		publishAt := time.Now()
+		canPublish, leaseEpoch, err := a.canPublishTmuxActivitySnapshot(opts, result.ScannerEpoch, publishAt)
+		if err != nil {
+			logging.Warn("tmux activity lease revalidation failed before snapshot publish: %v", err)
+			// Conservative fallback: if ownership cannot be revalidated, skip
+			// applying local activity to avoid split-brain ownership effects.
+			result.ScannerOwner = false
+			result.SkipApply = true
+		} else if canPublish {
+			if err := a.publishTmuxActivitySnapshot(opts, active, result.ScannerEpoch, publishAt); err != nil {
+				if errors.Is(err, errTmuxActivityOwnershipLostAfterPublish) {
+					result.ScannerOwner = false
+					result.SkipApply = true
+					_, leaseEpoch, checkErr := a.canPublishTmuxActivitySnapshot(opts, result.ScannerEpoch, time.Now())
+					if checkErr != nil {
+						logging.Warn("tmux activity lease revalidation failed after ownership loss: %v", checkErr)
+					} else if leaseEpoch > 0 {
+						result.ScannerEpoch = leaseEpoch
+					}
+				} else {
+					logging.Warn("tmux activity snapshot publish failed: %v", err)
+				}
+			}
+		} else {
+			result.ScannerOwner = false
+			result.SkipApply = true
+			if leaseEpoch > 0 {
+				result.ScannerEpoch = leaseEpoch
+			}
+		}
+	}
+	return result
+}
+
+func (a *App) fetchAndSyncActivitySessionStates(
+	infoBySession map[string]activity.SessionInfo,
+	opts tmux.Options,
+	svc *tmuxService,
+) ([]activity.TaggedSession, []messages.TabSessionStatus, error) {
+	sessions, err := activity.FetchTaggedSessions(svc, infoBySession, opts)
+	if err != nil {
+		return nil, nil, err
+	}
+	// Mutates infoBySession so IsRunningSession sees corrected statuses.
+	stoppedTabs := syncActivitySessionStates(infoBySession, sessions, svc, opts)
+	return sessions, stoppedTabs, nil
 }
 
 func (a *App) handleTmuxAvailableResult(msg tmuxAvailableResult) []tea.Cmd {

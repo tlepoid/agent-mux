@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/andyrewlee/amux/internal/app/activity"
 	"github.com/andyrewlee/amux/internal/logging"
 	"github.com/andyrewlee/amux/internal/tmux"
 )
@@ -17,6 +18,17 @@ const orphanSessionGracePeriod = 30 * time.Second
 type orphanGCResult struct {
 	Killed int
 	Err    error
+}
+
+// staleDetachedAgentGCResult is returned after attempting to clean up stale
+// detached agent sessions.
+type staleDetachedAgentGCResult struct {
+	Considered      int
+	Killed          int
+	SkippedAttached int
+	SkippedFresh    int
+	SkippedLivePane int
+	Err             error
 }
 
 // terminalGCResult is returned after attempting to clean up stale terminal sessions.
@@ -67,6 +79,119 @@ func (a *App) gcOrphanedTmuxSessions() tea.Cmd {
 // gcStaleTerminalSessions is a no-op since sessions are always persisted.
 func (a *App) gcStaleTerminalSessions() tea.Cmd {
 	return nil
+}
+
+func (a *App) gcStaleDetachedAgentSessions() tea.Cmd {
+	if !a.tmuxAvailable {
+		return nil
+	}
+	opts := a.tmuxOptions
+	svc := a.tmuxService
+	return func() tea.Msg {
+		if svc == nil {
+			return staleDetachedAgentGCResult{Err: errTmuxUnavailable}
+		}
+
+		match := map[string]string{"@amux": "1", "@amux_type": "agent"}
+		if instanceID := strings.TrimSpace(a.instanceID); instanceID != "" {
+			// Detached-agent GC is instance-scoped so multiple amux instances do
+			// not race to kill each other's managed sessions.
+			match["@amux_instance"] = instanceID
+		}
+		rows, err := svc.SessionsWithTags(
+			match,
+			[]string{
+				"@amux_created_at",
+				"session_activity",
+				tmux.TagLastOutputAt,
+				tmux.TagLastInputAt,
+				tmux.TagSessionLeaseAt,
+			},
+			opts,
+		)
+		if err != nil {
+			return staleDetachedAgentGCResult{Err: err}
+		}
+		var sessionNamesWithClients map[string]bool
+		type sessionClientsLister interface {
+			SessionNamesWithClients(opts tmux.Options) (map[string]bool, error)
+		}
+		// Bulk client listing is an optional fast path on the default tmux ops.
+		// Keep a per-session fallback for stubs/custom ops that only expose
+		// SessionHasClients so detached-session GC remains correct everywhere.
+		if lister, ok := svc.ops.(sessionClientsLister); ok {
+			clientNames, clientsErr := lister.SessionNamesWithClients(opts)
+			if clientsErr != nil {
+				logging.Warn("detached agent GC: failed to list attached clients in bulk: %v", clientsErr)
+			} else {
+				sessionNamesWithClients = clientNames
+			}
+		}
+
+		allStates, err := svc.AllSessionStates(opts)
+		if err != nil {
+			return staleDetachedAgentGCResult{Err: err}
+		}
+
+		now := time.Now()
+		result := staleDetachedAgentGCResult{}
+		for _, row := range rows {
+			sessionName := strings.TrimSpace(row.Name)
+			if sessionName == "" {
+				continue
+			}
+			result.Considered++
+
+			hasClients := false
+			if sessionNamesWithClients != nil {
+				hasClients = sessionNamesWithClients[sessionName]
+			} else {
+				var checkErr error
+				hasClients, checkErr = svc.SessionHasClients(sessionName, opts)
+				if checkErr != nil {
+					logging.Warn("detached agent GC: failed to check clients for %s: %v", sessionName, checkErr)
+					continue
+				}
+			}
+			if hasClients {
+				result.SkippedAttached++
+				continue
+			}
+
+			lastActiveAt := activityTagTime(row.Tags)
+			if lastActiveAt.IsZero() {
+				// SessionCreatedAt is a tmux-native fallback for sessions whose
+				// @amux_created_at tag is absent from list output.
+				if createdAt, err := svc.SessionCreatedAt(sessionName, opts); err == nil && createdAt > 0 {
+					lastActiveAt = time.Unix(createdAt, 0)
+				}
+			}
+			if lastActiveAt.IsZero() {
+				lastActiveAt = now
+			}
+			if lastActiveAt.After(now) {
+				result.SkippedFresh++
+				continue
+			}
+			inactiveFor := now.Sub(lastActiveAt)
+			if inactiveFor < detachedAgentStaleAfter {
+				result.SkippedFresh++
+				continue
+			}
+			state, ok := allStates[sessionName]
+			if ok && state.Exists && state.HasLivePane && inactiveFor < detachedAgentLivePaneStaleAfter {
+				result.SkippedLivePane++
+				continue
+			}
+
+			if err := svc.KillSession(sessionName, opts); err != nil {
+				logging.Warn("detached agent GC: failed to kill session %s: %v", sessionName, err)
+				continue
+			}
+			result.Killed++
+		}
+		return result
+	}
 }
 
 type workspaceSession struct {
@@ -165,11 +290,31 @@ func (a *App) handleOrphanGCResult(msg orphanGCResult) {
 // handleOrphanGCTick runs orphan GC and restarts the ticker.
 func (a *App) handleOrphanGCTick() []tea.Cmd {
 	var cmds []tea.Cmd
+	if gcCmd := a.gcStaleDetachedAgentSessions(); gcCmd != nil {
+		cmds = append(cmds, gcCmd)
+	}
 	if gcCmd := a.gcOrphanedTmuxSessions(); gcCmd != nil {
 		cmds = append(cmds, gcCmd)
 	}
 	cmds = append(cmds, a.startOrphanGCTicker())
 	return cmds
+}
+
+func (a *App) handleStaleDetachedAgentGCResult(msg staleDetachedAgentGCResult) {
+	if msg.Err != nil {
+		logging.Warn("detached agent GC: %v", msg.Err)
+		return
+	}
+	if msg.Killed > 0 {
+		logging.Info(
+			"detached agent GC: killed=%d considered=%d attached=%d fresh=%d live_pane=%d",
+			msg.Killed,
+			msg.Considered,
+			msg.SkippedAttached,
+			msg.SkippedFresh,
+			msg.SkippedLivePane,
+		)
+	}
 }
 
 // sessionCountResult is returned after counting amux tmux sessions.
@@ -214,4 +359,40 @@ func (a *App) handleSessionCountResult(msg sessionCountResult) {
 		return
 	}
 	logging.Info("tmux session count at startup: %d", msg.Count)
+}
+
+func activityTagTime(tags map[string]string) time.Time {
+	best := time.Time{}
+	updateBest := func(candidate time.Time) {
+		if candidate.IsZero() {
+			return
+		}
+		if best.IsZero() || candidate.After(best) {
+			best = candidate
+		}
+	}
+	for _, key := range []string{
+		"session_activity",
+		tmux.TagSessionLeaseAt,
+		tmux.TagLastOutputAt,
+		tmux.TagLastInputAt,
+	} {
+		// For GC, lease refreshes represent owner-maintained activity and are
+		// intentionally considered alongside output/input tags.
+		// session_activity stores unix seconds; ParseLastOutputAtTag resolves
+		// units by magnitude (seconds vs millis/nanos).
+		raw := strings.TrimSpace(tags[key])
+		if raw == "" {
+			continue
+		}
+		if parsed, ok := activity.ParseLastOutputAtTag(raw); ok {
+			updateBest(parsed)
+		}
+	}
+	if raw := strings.TrimSpace(tags["@amux_created_at"]); raw != "" {
+		if sec, err := strconv.ParseInt(raw, 10, 64); err == nil && sec > 0 {
+			updateBest(time.Unix(sec, 0))
+		}
+	}
+	return best
 }
