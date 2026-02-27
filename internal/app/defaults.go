@@ -4,7 +4,8 @@ import "time"
 
 const (
 	// prefixTimeout controls how long prefix mode waits for a follow-up key.
-	prefixTimeout = 700 * time.Millisecond
+	// Keep this long enough for palette-driven discovery and multi-key sequences.
+	prefixTimeout = 3 * time.Second
 
 	// gitStatusTickInterval controls periodic git status refreshes.
 	gitStatusTickInterval = 3 * time.Second

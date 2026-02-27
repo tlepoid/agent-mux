@@ -7,7 +7,8 @@ type KeyMap struct {
 	// Prefix key (leader)
 	Prefix key.Binding
 
-	// Global (active only after prefix)
+	// Global (legacy fields retained for compatibility/documentation; prefix
+	// dispatch is now driven by prefixCommands in app_ui.go).
 	Quit           key.Binding
 	MoveLeft       key.Binding
 	MoveRight      key.Binding
@@ -48,7 +49,7 @@ func DefaultKeyMap() KeyMap {
 		// Ctrl-Space is reported as ctrl+@ or ctrl+space depending on terminal
 		Prefix: key.NewBinding(
 			key.WithKeys("ctrl+@", "ctrl+space"),
-			key.WithHelp("C-Space", "prefix"),
+			key.WithHelp("C-Space", "commands"),
 		),
 
 		// Commands active after prefix

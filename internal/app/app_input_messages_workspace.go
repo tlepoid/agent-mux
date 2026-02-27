@@ -243,6 +243,7 @@ func canonicalPathForMatch(path string) string {
 // handleWorkspaceActivated processes the WorkspaceActivated message.
 func (a *App) handleWorkspaceActivated(msg messages.WorkspaceActivated) []tea.Cmd {
 	var cmds []tea.Cmd
+	centerFocusQueuedReattach := false
 	a.activeProject = msg.Project
 	a.activeWorkspace = msg.Workspace
 	a.showWelcome = false
@@ -263,6 +264,43 @@ func (a *App) handleWorkspaceActivated(msg messages.WorkspaceActivated) []tea.Cm
 	}
 	if restoreCmd := a.center.RestoreTabsFromWorkspace(msg.Workspace); restoreCmd != nil {
 		cmds = append(cmds, restoreCmd)
+	}
+	// Mouse-first behavior: if this workspace already has center chat tabs,
+	// route keyboard input to the active chat tab immediately.
+	if msg.Workspace != nil {
+		wsID := string(msg.Workspace.ID())
+		centerVisible := a.layout != nil && a.layout.ShowCenter()
+		if centerVisible {
+			hasCenterTabs := false
+			// Existing in-memory tabs are available immediately for workspaces
+			// visited in this process (independent of async tmux discovery cmds).
+			if tabs, _ := a.center.GetTabsInfoForWorkspace(wsID); len(tabs) > 0 {
+				hasCenterTabs = true
+			}
+			// Also treat persisted tab metadata as a focus signal so this does
+			// not depend on synchronous tab hydration timing.
+			if !hasCenterTabs && len(msg.Workspace.OpenTabs) > 0 {
+				hasCenterTabs = true
+			}
+			// When no center-tab signal exists, keep the current focus instead of
+			// forcing a dashboard/center jump.
+			if hasCenterTabs {
+				// focusPane(PaneCenter) already performs the reattach attempt;
+				// mark it as queued regardless of returned command to avoid
+				// coupling deduplication to a nil/non-nil command shape.
+				focusCmd := a.focusPane(messages.PaneCenter)
+				centerFocusQueuedReattach = true
+				if focusCmd != nil {
+					cmds = append(cmds, focusCmd)
+				}
+			}
+		}
+		if !centerVisible {
+			// Keep keyboard routing on the visible pane in dashboard-only layouts.
+			if focusCmd := a.focusPane(messages.PaneDashboard); focusCmd != nil {
+				cmds = append(cmds, focusCmd)
+			}
+		}
 	}
 	// Sync active workspaces to dashboard (fixes spinner race condition)
 	a.syncActiveWorkspacesToDashboard()
@@ -289,7 +327,9 @@ func (a *App) handleWorkspaceActivated(msg messages.WorkspaceActivated) []tea.Cm
 		cmds = append(cmds, startCmd)
 	}
 	// Seamless UX: if restored active tab is detached, auto-reattach on workspace activation.
-	cmds = append(cmds, a.center.ReattachActiveTabIfDetached())
+	if !centerFocusQueuedReattach {
+		cmds = append(cmds, a.center.ReattachActiveTabIfDetached())
+	}
 	cmds = append(cmds, a.enforceAttachedAgentTabLimit()...)
 	return cmds
 }
