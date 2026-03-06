@@ -515,13 +515,19 @@ func (m *LazygitModel) handlePTYStopped(msg messages.LazygitPTYStopped) {
 
 // TerminalLayer returns a VTermLayer for compositor rendering.
 func (m *LazygitModel) TerminalLayer() *compositor.VTermLayer {
+	return m.TerminalLayerWithCursorOwner(true)
+}
+
+// TerminalLayerWithCursorOwner returns a VTermLayer while enforcing whether
+// this pane currently owns cursor rendering.
+func (m *LazygitModel) TerminalLayerWithCursorOwner(cursorOwner bool) *compositor.VTermLayer {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.vt == nil {
 		return nil
 	}
 	version := m.vt.Version()
-	showCursor := m.focused
+	showCursor := m.focused && cursorOwner
 	if m.cachedSnap != nil && m.cachedVersion == version && m.cachedShowCursor == showCursor {
 		return compositor.NewVTermLayer(m.cachedSnap)
 	}

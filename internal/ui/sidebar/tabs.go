@@ -10,6 +10,7 @@ import (
 	"github.com/andyrewlee/amux/internal/data"
 	"github.com/andyrewlee/amux/internal/messages"
 	"github.com/andyrewlee/amux/internal/ui/common"
+	"github.com/andyrewlee/amux/internal/ui/compositor"
 )
 
 // SidebarTab represents a tab type in the sidebar
@@ -396,6 +397,15 @@ func (m *TabbedSidebar) Lazygit() *LazygitModel {
 // ProjectTree returns the project tree model (for direct access if needed)
 func (m *TabbedSidebar) ProjectTree() *ProjectTree {
 	return m.projectTree
+}
+
+// TerminalLayerWithCursorOwner returns a VTermLayer for the lazygit pane when
+// the Git tab is active, enforcing cursor ownership.
+func (m *TabbedSidebar) TerminalLayerWithCursorOwner(cursorOwner bool) *compositor.VTermLayer {
+	if m.activeTab != TabGit {
+		return nil
+	}
+	return m.lazygit.TerminalLayerWithCursorOwner(cursorOwner)
 }
 
 // Close shuts down the sidebar (stops lazygit PTY).
