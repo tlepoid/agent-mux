@@ -293,6 +293,10 @@ func (a *App) handleWorkspaceActivated(msg messages.WorkspaceActivated) []tea.Cm
 				// on whichever pane the user is currently in so dashboard
 				// navigation (j/k) is not interrupted.
 				centerFocusQueuedReattach = true
+				// Still reattach the active tab if it is detached.
+				if cmd := a.center.ReattachActiveTabIfDetached(); cmd != nil {
+					cmds = append(cmds, cmd)
+				}
 			}
 		}
 		if !centerVisible {
