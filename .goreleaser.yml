@@ -44,8 +44,8 @@ changelog:
 
 release:
   github:
-    owner: andyrewlee
-    name: amux
+    owner: tlepoid
+    name: agent-mux
   draft: false
   prerelease: auto
   name_template: "v{{.Version}}"

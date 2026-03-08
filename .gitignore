@@ -1,4 +1,15 @@
 /amux
 /tmp/
-.gemini-clipboard/
 /.cache/
+.gemini-clipboard/
+.claude/settings.local.json
+perf/pprof/*.pprof
+*.pprof
+*.test
+coverage.out
+coverage.html
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store

@@ -42,6 +42,12 @@ Architecture references:
 - `internal/app/ARCHITECTURE.md`
 - `internal/app/MESSAGE_FLOW.md`
 
+## Platform Support
+
+amux is developed and tested on **Linux and macOS** only. CI runs exclusively on Ubuntu.
+
+Windows stub files (`*_windows.go`) exist to allow the package to compile on Windows, but Windows support is **experimental and untested**. PRs that improve Windows compatibility are welcome, but Windows-only regressions will not block Linux/macOS releases.
+
 ## Release
 
 Versioning follows SemVer and tags are `vX.Y.Z`. Pushing a tag triggers the GitHub Actions release job.
