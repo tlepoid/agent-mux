@@ -18,11 +18,15 @@ var githubSlugNonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
 // fetchGitHubIssuesCmd returns a Cmd that lists open GitHub issues via the gh CLI.
 func fetchGitHubIssuesCmd(project *data.Project) tea.Cmd {
 	return func() tea.Msg {
-		out, err := exec.Command("gh", "issue", "list",
+		cmd := exec.Command("gh", "issue", "list",
 			"--state", "open",
 			"--json", "number,title,url,body",
 			"--limit", "50",
-		).Output()
+		)
+		if project != nil && project.Path != "" {
+			cmd.Dir = project.Path
+		}
+		out, err := cmd.Output()
 		if err != nil {
 			return messages.GitHubIssuesLoaded{
 				Project: project,
