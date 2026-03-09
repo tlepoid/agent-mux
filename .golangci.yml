@@ -57,11 +57,11 @@ linters:
     forbidigo:
       exclude-godoc-examples: true
       forbid:
-        - p: ^print(ln)?$
+        - pattern: ^print(ln)?$
           msg: Avoid direct stdout/stderr prints in production code.
-        - p: ^fmt\.Print.*$
+        - pattern: ^fmt\.Print.*$
           msg: Use internal/logging for internal packages; stdout/stderr output is reserved for CLI entrypoints.
-        - p: ^log\.(Print|Printf|Println|Fatal|Fatalf|Fatalln|Panic|Panicf|Panicln)$
+        - pattern: ^log\.(Print|Printf|Println|Fatal|Fatalf|Fatalln|Panic|Panicf|Panicln)$
           msg: Use internal/logging and explicit error returns instead of stdlib log side effects.
     thelper:
       test:
