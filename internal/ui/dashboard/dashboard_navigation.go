@@ -189,7 +189,7 @@ func (m *Model) handleEnter() tea.Cmd {
 		}
 	case RowCreate:
 		return func() tea.Msg {
-			return messages.ShowCreateWorkspaceDialog{Project: row.Project}
+			return messages.ShowGitHubIssueDialog{Project: row.Project}
 		}
 	}
 
@@ -220,27 +220,6 @@ func (m *Model) handleDelete() tea.Cmd {
 	}
 
 	return nil
-}
-
-// handleCreateFromIssue triggers GitHub issue picker for RowCreate or RowProject rows.
-func (m *Model) handleCreateFromIssue() tea.Cmd {
-	if m.cursor >= len(m.rows) {
-		return nil
-	}
-	row := m.rows[m.cursor]
-	var project *data.Project
-	switch row.Type {
-	case RowCreate, RowProject:
-		project = row.Project
-	case RowWorkspace:
-		project = row.Project
-	}
-	if project == nil {
-		return nil
-	}
-	return func() tea.Msg {
-		return messages.ShowGitHubIssueDialog{Project: project}
-	}
 }
 
 // refresh requests a workspace rescan/import.

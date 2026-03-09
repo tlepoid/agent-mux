@@ -83,34 +83,60 @@ func (a *App) handleShowGitHubIssueDialog(msg messages.ShowGitHubIssueDialog) te
 	return fetchGitHubIssuesCmd(msg.Project)
 }
 
+// issueManualOption is the label shown at the bottom of the issue picker for bypassing to name input.
+const issueManualOption = "Enter name manually..."
+
 // handleGitHubIssuesLoaded shows the issue picker once issues have been fetched.
+// On error or when no issues exist, falls back to the regular name input dialog.
 func (a *App) handleGitHubIssuesLoaded(msg messages.GitHubIssuesLoaded) {
-	if msg.Err != nil {
-		logging.Warn("Failed to fetch GitHub issues: %v", msg.Err)
-		if a.toast != nil {
-			a.toast.ShowError("Could not fetch issues: " + msg.Err.Error())
-		}
-		return
-	}
-	if len(msg.Issues) == 0 {
-		if a.toast != nil {
-			a.toast.ShowWarning("No open GitHub issues found")
-		}
-		return
-	}
-	a.pendingGitHubIssues = msg.Issues
 	if msg.Project != nil {
 		a.dialogProject = msg.Project
 	}
 
-	labels := make([]string, len(msg.Issues))
-	for i, issue := range msg.Issues {
-		labels[i] = issueLabel(issue)
+	if msg.Err != nil {
+		logging.Warn("Failed to fetch GitHub issues: %v", msg.Err)
+		// Fall back to plain name input so users can still create workspaces.
+		a.showCreateWorkspaceNameDialog()
+		return
 	}
-	a.dialog = common.NewSelectDialog(DialogGitHubIssue, "Create from GitHub Issue", "Select an issue:", labels)
+
+	a.pendingGitHubIssues = msg.Issues
+
+	labels := make([]string, 0, len(msg.Issues)+1)
+	for _, issue := range msg.Issues {
+		labels = append(labels, issueLabel(issue))
+	}
+	// Always include an escape hatch at the bottom.
+	labels = append(labels, issueManualOption)
+
+	title := "New Workspace"
+	message := "Pick an issue or enter a name manually:"
+	if len(msg.Issues) == 0 {
+		message = "No open issues found."
+	}
+	a.dialog = common.NewSelectDialog(DialogGitHubIssue, title, message, labels)
 	a.dialog.SetSize(a.width, a.height)
 	a.dialog.SetShowKeymapHints(a.config.UI.ShowKeymapHints)
 	a.dialog.Show()
+}
+
+// showCreateWorkspaceNameDialog shows the plain name-entry dialog used for blank workspaces.
+func (a *App) showCreateWorkspaceNameDialog() {
+	d := common.NewInputDialog(DialogCreateWorkspace, "Create Workspace", "Enter workspace name...")
+	d.SetInputValidate(func(s string) string {
+		s = validation.SanitizeInput(s)
+		if s == "" {
+			return ""
+		}
+		if err := validation.ValidateWorkspaceName(s); err != nil {
+			return err.Error()
+		}
+		return ""
+	})
+	d.SetSize(a.width, a.height)
+	d.SetShowKeymapHints(a.config.UI.ShowKeymapHints)
+	d.Show()
+	a.dialog = d
 }
 
 // handleShowSelectAssistantDialog shows the select assistant dialog.

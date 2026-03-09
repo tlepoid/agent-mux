@@ -150,17 +150,23 @@ func (a *App) handleDialogResult(result common.DialogResult) tea.Cmd {
 		}
 
 	case DialogGitHubIssue:
-		if result.Index >= 0 && result.Index < len(a.pendingGitHubIssues) {
+		a.pendingWorkspaceProject = project
+		a.pendingWorkspaceBase = ""
+		// Restore dialogProject so the next dialog's result handler can read it.
+		a.dialogProject = project
+		// The last option in the list is always "Enter name manually..."
+		isManual := len(a.pendingGitHubIssues) == 0 || result.Index >= len(a.pendingGitHubIssues)
+		if isManual {
+			// User chose to enter a name manually — plain name input, no issue linked.
+			a.pendingGitHubIssues = nil
+			a.showCreateWorkspaceNameDialog()
+		} else {
 			issue := a.pendingGitHubIssues[result.Index]
 			a.pendingWorkspaceIssue = issue
 			a.pendingGitHubIssues = nil
-			// Pre-fill the workspace name with the generated issue slug.
-			suggestedName := issueWorkspaceName(issue)
-			a.pendingWorkspaceProject = project
-			a.pendingWorkspaceBase = ""
-			// Show name dialog with suggested name so user can edit if desired.
-			d := common.NewInputDialog(DialogCreateWorkspace, "Create Workspace from Issue", "Workspace name...")
-			d.SetInitialValue(suggestedName)
+			// Show name dialog pre-filled with the auto-generated slug so the user can edit.
+			d := common.NewInputDialog(DialogCreateWorkspace, "New Workspace from Issue", "Workspace name...")
+			d.SetInitialValue(issueWorkspaceName(issue))
 			d.SetInputValidate(func(s string) string {
 				s = validation.SanitizeInput(s)
 				if s == "" {
