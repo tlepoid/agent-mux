@@ -47,6 +47,10 @@ func (m *Model) renderTabBar() string {
 		var status ConversationStatus
 		if isChat {
 			status = m.TabConversationStatus(tab)
+			// Upgrade Waiting→Running when the tab has recent visible output.
+			if status == ConvStatusWaiting && m.IsTabActive(tab) {
+				status = ConvStatusRunning
+			}
 			switch status {
 			case ConvStatusRunning:
 				indicator = common.Icons.Running + " "

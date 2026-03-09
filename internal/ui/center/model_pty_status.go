@@ -1,7 +1,6 @@
 package center
 
 import (
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -158,7 +157,9 @@ const (
 	ConvStatusError                             // ✕ red    - something went wrong
 )
 
-// TabConversationStatus returns the display status for a chat tab.
+// TabConversationStatus returns the display status for a chat tab based on
+// process state alone. Callers with tmux activity data should upgrade
+// ConvStatusWaiting to ConvStatusRunning when tmux confirms recent output.
 func (m *Model) TabConversationStatus(tab *Tab) ConversationStatus {
 	if tab == nil || tab.isClosed() {
 		return ConvStatusIdle
@@ -169,76 +170,68 @@ func (m *Model) TabConversationStatus(tab *Tab) ConversationStatus {
 	tab.mu.Lock()
 	detached := tab.Detached
 	running := tab.Running
+	sessionName := tab.SessionName
+	if sessionName == "" && tab.Agent != nil {
+		sessionName = tab.Agent.Session
+	}
 	tab.mu.Unlock()
 
-	// Process stopped without the user detaching: treat as error.
-	if !running && !detached {
+	switch {
+	case !running && !detached:
 		return ConvStatusError
-	}
-	// Detached or cleanly stopped: idle.
-	if !running || detached {
+	case running && !detached:
+		return ConvStatusWaiting // caller upgrades to Running when tmux says active
+	default:
+		// detached=true: PTY dropped or user detached.
+		// If a tmux session name is known the session may still be alive and
+		// waiting for input — show Waiting so the user notices it.
+		if sessionName != "" {
+			return ConvStatusWaiting
+		}
 		return ConvStatusIdle
 	}
-	// Recent visible output: running.
-	if m.IsTabActive(tab) {
-		return ConvStatusRunning
-	}
-	// Connected but quiet: check whether the terminal is waiting for input.
-	if m.tabIsWaiting(tab) {
-		return ConvStatusWaiting
-	}
-	return ConvStatusIdle
 }
 
-// tabIsWaiting returns true if the terminal cursor line looks like an input prompt.
-func (m *Model) tabIsWaiting(tab *Tab) bool {
-	tab.mu.Lock()
-	defer tab.mu.Unlock()
-	if tab.Terminal == nil {
-		return false
-	}
-	screen := tab.Terminal.Screen
-	cursorY := tab.Terminal.CursorY
-	if cursorY < 0 || cursorY >= len(screen) {
-		return false
-	}
-	var sb strings.Builder
-	for _, cell := range screen[cursorY] {
-		if cell.Rune != 0 {
-			sb.WriteRune(cell.Rune)
-		}
-	}
-	text := strings.TrimRight(sb.String(), " ")
-	return looksLikeInputPrompt(text)
-}
-
-// looksLikeInputPrompt returns true when text ends with a common user-input prompt pattern.
-func looksLikeInputPrompt(text string) bool {
-	if text == "" {
-		return false
-	}
-	lower := strings.ToLower(text)
-	for _, suffix := range []string{
-		"? ", "?", "> ", ">>> ", ">> ",
-		"[y/n]", "[y/n] ", "(y/n)", "(y/n) ",
-		"[yes/no]", "[yes/no] ",
-	} {
-		if strings.HasSuffix(lower, suffix) {
-			return true
-		}
-	}
-	return false
-}
-
-// GetWorkspaceStatuses returns the aggregate AgentStatus for each workspace ID.
-// When a workspace has multiple tabs the most prominent status wins:
-// Error > Waiting > Running > Idle.
+// GetWorkspaceStatuses returns the base AgentStatus for each workspace ID,
+// derived solely from tab process state (not screen-activity heuristics).
+//
+// Callers that also have tmux activity data should upgrade AgentStatusWaiting
+// to AgentStatusRunning when tmux confirms recent output in that workspace.
+// This two-signal approach avoids false "idle" readings caused by tmux
+// continuously refreshing the terminal with escape sequences.
 func (m *Model) GetWorkspaceStatuses() map[string]common.AgentStatus {
 	result := make(map[string]common.AgentStatus)
 	for wsID, tabs := range m.tabsByWorkspace {
 		best := common.AgentStatusIdle
 		for _, tab := range tabs {
-			s := convToAgentStatus(m.TabConversationStatus(tab))
+			if tab == nil || tab.isClosed() || !m.isChatTab(tab) {
+				continue
+			}
+			tab.mu.Lock()
+			running := tab.Running
+			detached := tab.Detached
+			sessionName := tab.SessionName
+			if sessionName == "" && tab.Agent != nil {
+				sessionName = tab.Agent.Session
+			}
+			tab.mu.Unlock()
+
+			var s common.AgentStatus
+			switch {
+			case !running && !detached:
+				s = common.AgentStatusError
+			case running && !detached:
+				s = common.AgentStatusWaiting // upgraded to Running by caller if tmux active
+			default:
+				// detached=true: PTY dropped or user detached.
+				// If a tmux session name is known the session may still be alive
+				// and waiting for input — show Waiting so the user notices it.
+				if sessionName != "" {
+					s = common.AgentStatusWaiting
+				} else {
+					s = common.AgentStatusIdle
+				}
+			}
 			if s > best {
 				best = s
 			}
@@ -246,19 +239,6 @@ func (m *Model) GetWorkspaceStatuses() map[string]common.AgentStatus {
 		result[wsID] = best
 	}
 	return result
-}
-
-func convToAgentStatus(s ConversationStatus) common.AgentStatus {
-	switch s {
-	case ConvStatusRunning:
-		return common.AgentStatusRunning
-	case ConvStatusWaiting:
-		return common.AgentStatusWaiting
-	case ConvStatusError:
-		return common.AgentStatusError
-	default:
-		return common.AgentStatusIdle
-	}
 }
 
 // StartPTYReaders starts reading from all PTYs across all workspaces

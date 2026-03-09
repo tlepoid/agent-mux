@@ -66,10 +66,7 @@ func (m *Model) renderRow(row Row, selected bool) string {
 		}
 		style = applyDirtyForeground(style, dirty, active, selected)
 
-		// Status icon always at the left edge (1 char) so it's visible at any sidebar width.
-		agentStatus := m.workspaceStatuses[row.ActivityWorkspaceID]
-		iconStr := lipgloss.NewStyle().Foreground(common.AgentStatusColor(agentStatus)).Render(common.AgentStatusIcon(agentStatus))
-		iconWidth := lipgloss.Width(iconStr)
+		prefix := " "
 
 		// Reserve space for delete icon to keep status aligned
 		deleteSlot := "   "
@@ -78,9 +75,9 @@ func (m *Model) renderRow(row Row, selected bool) string {
 			deleteSlot = " " + common.Icons.Close + " "
 		}
 
-		// Truncate project name to fit within pane (width - border - padding - icon - status - deleteSlot)
+		// Truncate project name to fit within pane (width - border - padding - status - deleteSlot)
 		name := row.Project.Name
-		maxNameWidth := m.width - 3 - lipgloss.Width(status) - deleteSlotWidth - iconWidth - 1
+		maxNameWidth := m.width - 3 - lipgloss.Width(status) - deleteSlotWidth - lipgloss.Width(prefix) - 1
 		if maxNameWidth > 0 && lipgloss.Width(name) > maxNameWidth {
 			runes := []rune(name)
 			for len(runes) > 0 && lipgloss.Width(string(runes)) > maxNameWidth-1 {
@@ -91,10 +88,10 @@ func (m *Model) renderRow(row Row, selected bool) string {
 
 		// Track delete slot position for click detection
 		if selected {
-			m.deleteIconX = iconWidth + lipgloss.Width(style.Render(name))
+			m.deleteIconX = lipgloss.Width(style.Render(prefix + name))
 		}
 
-		return iconStr + style.Render(name+deleteSlot) + status
+		return style.Render(prefix+name+deleteSlot) + status
 
 	case RowWorkspace:
 		styledPrefix := " "
@@ -122,7 +119,11 @@ func (m *Model) renderRow(row Row, selected bool) string {
 		}
 
 		// Status icon always at the left edge (1 char) so it's visible at any sidebar width.
+		// Upgrade Waiting→Running when tmux confirms recent output in this workspace.
 		agentStatus := m.workspaceStatuses[row.ActivityWorkspaceID]
+		if agentStatus == common.AgentStatusWaiting && m.activeWorkspaceIDs[row.ActivityWorkspaceID] {
+			agentStatus = common.AgentStatusRunning
+		}
 		iconStr := lipgloss.NewStyle().Foreground(common.AgentStatusColor(agentStatus)).Render(common.AgentStatusIcon(agentStatus))
 		iconWidth := lipgloss.Width(iconStr)
 
