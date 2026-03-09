@@ -147,6 +147,12 @@ func (a *App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case messages.ShowCreateWorkspaceDialog:
 		a.handleShowCreateWorkspaceDialog(msg)
 
+	case messages.ShowGitHubIssueDialog:
+		cmds = append(cmds, a.handleShowGitHubIssueDialog(msg))
+
+	case messages.GitHubIssuesLoaded:
+		a.handleGitHubIssuesLoaded(msg)
+
 	case messages.ShowDeleteWorkspaceDialog:
 		a.handleShowDeleteWorkspaceDialog(msg)
 

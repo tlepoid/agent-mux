@@ -366,13 +366,14 @@ func (a *App) handleCreateWorkspace(msg messages.CreateWorkspace) []tea.Cmd {
 		pending := a.workspaceService.pendingWorkspace(msg.Project, name, base)
 		if pending != nil {
 			pending.Assistant = assistant
+			pending.Issue = msg.Issue
 			a.creatingWorkspaceIDs[string(pending.ID())] = true
 			if cmd := a.dashboard.SetWorkspaceCreating(pending, true); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
 		}
 	}
-	cmds = append(cmds, a.createWorkspace(msg.Project, name, base, assistant))
+	cmds = append(cmds, a.createWorkspace(msg.Project, name, base, assistant, msg.Issue))
 	return cmds
 }
 

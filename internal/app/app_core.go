@@ -33,6 +33,7 @@ const (
 	DialogSelectAssistant = "select_assistant"
 	DialogQuit            = "quit"
 	DialogCleanupTmux     = "cleanup_tmux"
+	DialogGitHubIssue     = "github_issue"
 )
 
 // prefixTimeoutMsg is sent when the prefix mode timer expires.
@@ -94,6 +95,8 @@ type App struct {
 	pendingWorkspaceProject *data.Project
 	pendingWorkspaceName    string
 	pendingWorkspaceBase    string
+	pendingWorkspaceIssue   *data.GitHubIssue   // Set when creating from a GitHub issue
+	pendingGitHubIssues     []*data.GitHubIssue // Cached issue list for the picker
 
 	// Git status management
 	fileWatcher     *git.FileWatcher

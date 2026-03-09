@@ -50,6 +50,7 @@ type Dialog struct {
 	inputTransform InputTransformFunc
 	inputValidate  InputValidateFunc
 	validationErr  string
+	initialValue   string
 
 	// Fuzzy filter state
 	filterEnabled   bool
@@ -139,6 +140,12 @@ func (d *Dialog) SetInputValidate(fn InputValidateFunc) *Dialog {
 	return d
 }
 
+// SetInitialValue sets the initial value shown in an input dialog.
+func (d *Dialog) SetInitialValue(v string) *Dialog {
+	d.initialValue = v
+	return d
+}
+
 // transformInputMsg applies the input transform to key press and paste messages
 func (d *Dialog) transformInputMsg(msg tea.Msg) tea.Msg {
 	switch m := msg.(type) {
@@ -167,7 +174,8 @@ func (d *Dialog) Show() {
 	d.validationErr = ""
 	d.cursor = 0
 	if d.dtype == DialogInput {
-		d.input.SetValue("")
+		d.input.SetValue(d.initialValue)
+		d.input.SetCursor(len(d.initialValue))
 		d.input.Focus()
 	}
 	if d.filterEnabled {

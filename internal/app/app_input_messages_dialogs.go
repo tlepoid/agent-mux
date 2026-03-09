@@ -77,6 +77,42 @@ func (a *App) handleShowRemoveProjectDialog(msg messages.ShowRemoveProjectDialog
 	a.dialog.Show()
 }
 
+// handleShowGitHubIssueDialog starts an async fetch of open GitHub issues.
+func (a *App) handleShowGitHubIssueDialog(msg messages.ShowGitHubIssueDialog) tea.Cmd {
+	a.dialogProject = msg.Project
+	return fetchGitHubIssuesCmd(msg.Project)
+}
+
+// handleGitHubIssuesLoaded shows the issue picker once issues have been fetched.
+func (a *App) handleGitHubIssuesLoaded(msg messages.GitHubIssuesLoaded) {
+	if msg.Err != nil {
+		logging.Warn("Failed to fetch GitHub issues: %v", msg.Err)
+		if a.toast != nil {
+			a.toast.ShowError("Could not fetch issues: " + msg.Err.Error())
+		}
+		return
+	}
+	if len(msg.Issues) == 0 {
+		if a.toast != nil {
+			a.toast.ShowWarning("No open GitHub issues found")
+		}
+		return
+	}
+	a.pendingGitHubIssues = msg.Issues
+	if msg.Project != nil {
+		a.dialogProject = msg.Project
+	}
+
+	labels := make([]string, len(msg.Issues))
+	for i, issue := range msg.Issues {
+		labels[i] = issueLabel(issue)
+	}
+	a.dialog = common.NewSelectDialog(DialogGitHubIssue, "Create from GitHub Issue", "Select an issue:", labels)
+	a.dialog.SetSize(a.width, a.height)
+	a.dialog.SetShowKeymapHints(a.config.UI.ShowKeymapHints)
+	a.dialog.Show()
+}
+
 // handleShowSelectAssistantDialog shows the select assistant dialog.
 func (a *App) handleShowSelectAssistantDialog() {
 	if a.activeWorkspace == nil && a.pendingWorkspaceProject == nil {

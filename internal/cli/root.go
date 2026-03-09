@@ -142,7 +142,7 @@ func routeWorkspace(w, wErr io.Writer, gf GlobalFlags, args []string, version st
 		if gf.JSON {
 			ReturnError(w, "usage_error", "Usage: amux workspace <list|create|remove> [flags]", nil, version)
 		} else {
-			fmt.Fprintln(wErr, "Usage: amux workspace <list|create|remove> [flags]")
+			fmt.Fprintln(wErr, "Usage: amux workspace <list|create|remove> [flags]\n  workspace create [<name>] --project <path> [--issue <number>]")
 		}
 		return ExitUsage
 	}
@@ -215,7 +215,7 @@ Commands:
   capabilities        Machine-readable CLI capabilities
   logs tail           Tail the amux log file
   workspace list      List workspaces
-  workspace create    Create a workspace
+  workspace create    Create a workspace (--issue <N> links a GitHub issue)
   workspace remove    Remove a workspace
   agent list          List running agents
   agent capture       Capture agent pane output

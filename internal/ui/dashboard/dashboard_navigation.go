@@ -222,6 +222,27 @@ func (m *Model) handleDelete() tea.Cmd {
 	return nil
 }
 
+// handleCreateFromIssue triggers GitHub issue picker for RowCreate or RowProject rows.
+func (m *Model) handleCreateFromIssue() tea.Cmd {
+	if m.cursor >= len(m.rows) {
+		return nil
+	}
+	row := m.rows[m.cursor]
+	var project *data.Project
+	switch row.Type {
+	case RowCreate, RowProject:
+		project = row.Project
+	case RowWorkspace:
+		project = row.Project
+	}
+	if project == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		return messages.ShowGitHubIssueDialog{Project: project}
+	}
+}
+
 // refresh requests a workspace rescan/import.
 func (m *Model) refresh() tea.Cmd {
 	return func() tea.Msg { return messages.RescanWorkspaces{} }

@@ -12,17 +12,18 @@ import (
 
 // WorkspaceInfo is the JSON-serializable workspace representation.
 type WorkspaceInfo struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Branch    string `json:"branch"`
-	Base      string `json:"base"`
-	Repo      string `json:"repo"`
-	Root      string `json:"root"`
-	Runtime   string `json:"runtime"`
-	Assistant string `json:"assistant"`
-	Archived  bool   `json:"archived"`
-	Created   string `json:"created"`
-	TabCount  int    `json:"tab_count"`
+	ID        string            `json:"id"`
+	Name      string            `json:"name"`
+	Branch    string            `json:"branch"`
+	Base      string            `json:"base"`
+	Repo      string            `json:"repo"`
+	Root      string            `json:"root"`
+	Runtime   string            `json:"runtime"`
+	Assistant string            `json:"assistant"`
+	Archived  bool              `json:"archived"`
+	Created   string            `json:"created"`
+	TabCount  int               `json:"tab_count"`
+	Issue     *data.GitHubIssue `json:"issue,omitempty"`
 }
 
 func workspaceToInfo(ws *data.Workspace) WorkspaceInfo {
@@ -42,6 +43,7 @@ func workspaceToInfo(ws *data.Workspace) WorkspaceInfo {
 		Archived:  ws.Archived,
 		Created:   created,
 		TabCount:  len(ws.OpenTabs),
+		Issue:     ws.Issue,
 	}
 }
 

@@ -21,7 +21,7 @@ func (a *App) handleDialogResultMsg(msg tea.Msg) (bool, tea.Cmd) {
 	}
 	logging.Info("Received DialogResult: id=%s confirmed=%v", result.ID, result.Confirmed)
 	switch result.ID {
-	case DialogAddProject, DialogCreateWorkspace, DialogDeleteWorkspace, DialogRemoveProject, DialogSelectAssistant, "agent-picker", DialogQuit, DialogCleanupTmux:
+	case DialogAddProject, DialogCreateWorkspace, DialogDeleteWorkspace, DialogRemoveProject, DialogSelectAssistant, "agent-picker", DialogQuit, DialogCleanupTmux, DialogGitHubIssue:
 		return true, common.SafeCmd(a.handleDialogResult(result))
 	}
 	// If not an App-level dialog, let it fall through to components.
@@ -105,10 +105,13 @@ func (a *App) handleDialogResult(result common.DialogResult) tea.Cmd {
 	logging.Debug("Dialog result: id=%s confirmed=%v value=%s", result.ID, result.Confirmed, result.Value)
 
 	if !result.Confirmed {
-		if result.ID == DialogSelectAssistant || result.ID == "agent-picker" {
+		if result.ID == DialogSelectAssistant || result.ID == "agent-picker" ||
+			result.ID == DialogGitHubIssue || result.ID == DialogCreateWorkspace {
 			a.pendingWorkspaceProject = nil
 			a.pendingWorkspaceName = ""
 			a.pendingWorkspaceBase = ""
+			a.pendingWorkspaceIssue = nil
+			a.pendingGitHubIssues = nil
 		}
 		logging.Debug("Dialog canceled")
 		return nil
@@ -144,6 +147,34 @@ func (a *App) handleDialogResult(result common.DialogResult) tea.Cmd {
 			return func() tea.Msg {
 				return messages.ShowSelectAssistantDialog{}
 			}
+		}
+
+	case DialogGitHubIssue:
+		if result.Index >= 0 && result.Index < len(a.pendingGitHubIssues) {
+			issue := a.pendingGitHubIssues[result.Index]
+			a.pendingWorkspaceIssue = issue
+			a.pendingGitHubIssues = nil
+			// Pre-fill the workspace name with the generated issue slug.
+			suggestedName := issueWorkspaceName(issue)
+			a.pendingWorkspaceProject = project
+			a.pendingWorkspaceBase = ""
+			// Show name dialog with suggested name so user can edit if desired.
+			d := common.NewInputDialog(DialogCreateWorkspace, "Create Workspace from Issue", "Workspace name...")
+			d.SetInitialValue(suggestedName)
+			d.SetInputValidate(func(s string) string {
+				s = validation.SanitizeInput(s)
+				if s == "" {
+					return ""
+				}
+				if err := validation.ValidateWorkspaceName(s); err != nil {
+					return err.Error()
+				}
+				return ""
+			})
+			d.SetSize(a.width, a.height)
+			d.SetShowKeymapHints(a.config.UI.ShowKeymapHints)
+			d.Show()
+			a.dialog = d
 		}
 
 	case DialogDeleteWorkspace:
@@ -183,15 +214,18 @@ func (a *App) handleDialogResult(result common.DialogResult) tea.Cmd {
 			pendingProject := a.pendingWorkspaceProject
 			pendingName := a.pendingWorkspaceName
 			pendingBase := a.pendingWorkspaceBase
+			pendingIssue := a.pendingWorkspaceIssue
 			a.pendingWorkspaceProject = nil
 			a.pendingWorkspaceName = ""
 			a.pendingWorkspaceBase = ""
+			a.pendingWorkspaceIssue = nil
 			return func() tea.Msg {
 				return messages.CreateWorkspace{
 					Project:   pendingProject,
 					Name:      pendingName,
 					Base:      pendingBase,
 					Assistant: assistant,
+					Issue:     pendingIssue,
 				}
 			}
 		}
