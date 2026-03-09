@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/andyrewlee/amux/internal/data"
+	"github.com/tlepoid/tumuxi/internal/data"
 )
 
 // githubIssueResult wraps a fetched issue so callers can distinguish "no issue requested" from "issue fetched".
