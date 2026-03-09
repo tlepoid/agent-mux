@@ -1,26 +1,13 @@
 <p align="center">
-  <img width="339" height="105" alt="Screenshot 2026-01-20 at 1 00 23 AM" src="https://github.com/user-attachments/assets/fdbefab9-9f7c-4e08-a423-a436dda3c496" />
+  <img width="400" height="135" alt="image" src="https://github.com/user-attachments/assets/0650f319-7b4c-4448-af4c-f929f8b55de0" />
 </p>
 
-<p align="center">TUI for easily running parallel coding agents</p>
+<p align="center">TUI for running parallel coding agents</p>
 
-<p align="center">
-  <a href="https://github.com/tlepoid/tumuxi/releases">
-    <img src="https://img.shields.io/github/v/release/tlepoid/tumuxi?style=flat-square" alt="Latest release" />
-  </a>
-  <a href="LICENSE">
-    <img src="https://img.shields.io/github/license/tlepoid/tumuxi?style=flat-square" alt="License" />
-  </a>
-  <img src="https://img.shields.io/badge/Go-1.24.12-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go version" />
-</p>
+<img width="3831" height="2155" alt="image" src="https://github.com/user-attachments/assets/cd1e75a7-6568-4863-bb47-7b0230c1eb6f" />
 
-<p align="center">
-  <a href="#quick-start">Quick start</a> ·
-  <a href="#features">Features</a> ·
-  <a href="#configuration">Configuration</a>
-</p>
+---
 
-<img width="3840" height="2160" alt="image" src="https://github.com/user-attachments/assets/63aa6c74-0a71-4475-a493-404be6408f5b" />
 
 ## What is tumuxi?
 
@@ -50,7 +37,4 @@ go install github.com/tlepoid/tumuxi/cmd/tumuxi@latest
 - **No wrappers**: Works with Claude Code, Codex, Gemini, Amp, OpenCode, and Droid
 - **Keyboard + mouse**: Can be operated with just the keyboard or with a mouse
 - **All-in-one tool**: Run agents, view diffs via lazygit, and access terminal
-
-## Architecture quick tour
-
-Start with `internal/app/ARCHITECTURE.md` for lifecycle, PTY flow, tmux tagging, and persistence invariants. Message boundaries and command discipline are documented in `internal/app/MESSAGE_FLOW.md`.
+- **Integrate with GitHub**: Syncs with github to autopopulate agents with context from issues
