@@ -103,7 +103,7 @@ func TestCreateWorkspaceRejectsInvalidName(t *testing.T) {
 	project := data.NewProject("/tmp/repo")
 	svc := newWorkspaceService(nil, nil, nil, "/tmp/workspaces")
 	svc.gitOps = mock
-	msg := svc.CreateWorkspace(project, "bad/name", "main")()
+	msg := svc.CreateWorkspace(project, "bad/name", "main", "claude", nil)()
 
 	failed, ok := msg.(messages.WorkspaceCreateFailed)
 	if !ok {
@@ -132,7 +132,7 @@ func TestCreateWorkspaceRejectsInvalidBaseRef(t *testing.T) {
 	project := data.NewProject("/tmp/repo")
 	svc := newWorkspaceService(nil, nil, nil, "/tmp/workspaces")
 	svc.gitOps = mock
-	msg := svc.CreateWorkspace(project, "feature", "bad ref")()
+	msg := svc.CreateWorkspace(project, "feature", "bad ref", "claude", nil)()
 
 	failed, ok := msg.(messages.WorkspaceCreateFailed)
 	if !ok {
@@ -163,7 +163,7 @@ func TestCreateWorkspaceRejectsPathOutsideManagedRoot(t *testing.T) {
 	project := &data.Project{Name: "../escape", Path: "/tmp/repo"}
 	svc := newWorkspaceService(nil, nil, nil, "/tmp/workspaces")
 	svc.gitOps = mock
-	msg := svc.CreateWorkspace(project, "feature", "main")()
+	msg := svc.CreateWorkspace(project, "feature", "main", "claude", nil)()
 
 	failed, ok := msg.(messages.WorkspaceCreateFailed)
 	if !ok {

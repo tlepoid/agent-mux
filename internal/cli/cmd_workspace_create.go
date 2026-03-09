@@ -26,11 +26,34 @@ func cmdWorkspaceCreate(w, wErr io.Writer, gf GlobalFlags, args []string, versio
 	project := fs.String("project", "", "project repo path (required)")
 	assistant := fs.String("assistant", "", "assistant name (defaults to configured default assistant)")
 	base := fs.String("base", "", "base branch (auto-detected if omitted)")
+	issue := fs.Int("issue", 0, "GitHub issue number to link (auto-generates name/branch from issue title)")
 	idempotencyKey := fs.String("idempotency-key", "", "idempotency key for safe retries")
 	name, err := parseSinglePositionalWithFlags(fs, args)
 	if err != nil {
 		return returnUsageError(w, wErr, gf, usage, version, err)
 	}
+
+	// Fetch GitHub issue if requested, and derive defaults from it.
+	var linkedIssue *githubIssueResult
+	if *issue != 0 {
+		fetched, fetchErr := fetchGitHubIssue(*issue)
+		if fetchErr != nil {
+			if gf.JSON {
+				return returnJSONErrorMaybeIdempotent(
+					w, wErr, gf, version, "workspace.create", *idempotencyKey,
+					ExitInternalError, "github_issue_fetch_failed", fetchErr.Error(),
+					map[string]any{"issue": *issue},
+				)
+			}
+			Errorf(wErr, "failed to fetch GitHub issue #%d: %v", *issue, fetchErr)
+			return ExitInternalError
+		}
+		linkedIssue = &githubIssueResult{issue: fetched}
+		if name == "" {
+			name = issueDefaultName(fetched)
+		}
+	}
+
 	assistantName := strings.ToLower(strings.TrimSpace(*assistant))
 	if name == "" || *project == "" {
 		return returnUsageError(w, wErr, gf, usage, version, nil)
@@ -226,6 +249,9 @@ func cmdWorkspaceCreate(w, wErr io.Writer, gf GlobalFlags, args []string, versio
 	// Save metadata
 	ws := data.NewWorkspace(name, name, baseBranch, projectPath, wsPath)
 	ws.Assistant = assistantName
+	if linkedIssue != nil {
+		ws.Issue = linkedIssue.issue
+	}
 	if err := svc.Store.Save(ws); err != nil {
 		cleanupErr := rollbackWorkspaceCreate(projectPath, wsPath, name, !branchExistedBefore)
 		msg := err.Error()

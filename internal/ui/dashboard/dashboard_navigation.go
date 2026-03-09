@@ -189,7 +189,7 @@ func (m *Model) handleEnter() tea.Cmd {
 		}
 	case RowCreate:
 		return func() tea.Msg {
-			return messages.ShowCreateWorkspaceDialog{Project: row.Project}
+			return messages.ShowGitHubIssueDialog{Project: row.Project}
 		}
 	}
 

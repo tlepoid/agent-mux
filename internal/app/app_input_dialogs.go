@@ -21,7 +21,7 @@ func (a *App) handleDialogResultMsg(msg tea.Msg) (bool, tea.Cmd) {
 	}
 	logging.Info("Received DialogResult: id=%s confirmed=%v", result.ID, result.Confirmed)
 	switch result.ID {
-	case DialogAddProject, DialogCreateWorkspace, DialogDeleteWorkspace, DialogRemoveProject, DialogSelectAssistant, "agent-picker", DialogQuit, DialogCleanupTmux:
+	case DialogAddProject, DialogCreateWorkspace, DialogDeleteWorkspace, DialogRemoveProject, DialogSelectAssistant, "agent-picker", DialogQuit, DialogCleanupTmux, DialogGitHubIssue:
 		return true, common.SafeCmd(a.handleDialogResult(result))
 	}
 	// If not an App-level dialog, let it fall through to components.
@@ -105,10 +105,13 @@ func (a *App) handleDialogResult(result common.DialogResult) tea.Cmd {
 	logging.Debug("Dialog result: id=%s confirmed=%v value=%s", result.ID, result.Confirmed, result.Value)
 
 	if !result.Confirmed {
-		if result.ID == DialogSelectAssistant || result.ID == "agent-picker" {
+		if result.ID == DialogSelectAssistant || result.ID == "agent-picker" ||
+			result.ID == DialogGitHubIssue {
 			a.pendingWorkspaceProject = nil
 			a.pendingWorkspaceName = ""
 			a.pendingWorkspaceBase = ""
+			a.pendingWorkspaceIssue = nil
+			a.pendingGitHubIssues = nil
 		}
 		logging.Debug("Dialog canceled")
 		return nil
@@ -144,6 +147,32 @@ func (a *App) handleDialogResult(result common.DialogResult) tea.Cmd {
 			return func() tea.Msg {
 				return messages.ShowSelectAssistantDialog{}
 			}
+		}
+
+	case DialogGitHubIssue:
+		name := validation.SanitizeInput(result.Value)
+		if result.Index >= 0 && result.Index < len(a.pendingGitHubIssues) {
+			// User selected an issue — link it and use its generated name.
+			a.pendingWorkspaceIssue = a.pendingGitHubIssues[result.Index]
+			if name == "" {
+				name = issueWorkspaceName(a.pendingWorkspaceIssue)
+			}
+		}
+		a.pendingGitHubIssues = nil
+		if name == "" {
+			// Nothing typed and nothing selected — ignore.
+			return nil
+		}
+		if err := validation.ValidateWorkspaceName(name); err != nil {
+			return func() tea.Msg {
+				return messages.Error{Err: err, Context: errorContext(errorServiceDialog, "validating workspace name")}
+			}
+		}
+		a.pendingWorkspaceProject = project
+		a.pendingWorkspaceName = name
+		a.pendingWorkspaceBase = ""
+		return func() tea.Msg {
+			return messages.ShowSelectAssistantDialog{}
 		}
 
 	case DialogDeleteWorkspace:
@@ -183,15 +212,18 @@ func (a *App) handleDialogResult(result common.DialogResult) tea.Cmd {
 			pendingProject := a.pendingWorkspaceProject
 			pendingName := a.pendingWorkspaceName
 			pendingBase := a.pendingWorkspaceBase
+			pendingIssue := a.pendingWorkspaceIssue
 			a.pendingWorkspaceProject = nil
 			a.pendingWorkspaceName = ""
 			a.pendingWorkspaceBase = ""
+			a.pendingWorkspaceIssue = nil
 			return func() tea.Msg {
 				return messages.CreateWorkspace{
 					Project:   pendingProject,
 					Name:      pendingName,
 					Base:      pendingBase,
 					Assistant: assistant,
+					Issue:     pendingIssue,
 				}
 			}
 		}

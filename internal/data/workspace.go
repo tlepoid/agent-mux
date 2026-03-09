@@ -30,6 +30,14 @@ func NormalizeRuntime(runtime string) string {
 	}
 }
 
+// GitHubIssue stores metadata about a linked GitHub issue
+type GitHubIssue struct {
+	Number int    `json:"number"`
+	Title  string `json:"title"`
+	URL    string `json:"url"`
+	Body   string `json:"body,omitempty"`
+}
+
 // TabInfo stores information about an open tab
 type TabInfo struct {
 	Assistant   string `json:"assistant"`
@@ -75,6 +83,9 @@ type Workspace struct {
 	// UI state
 	OpenTabs       []TabInfo `json:"open_tabs,omitempty"`
 	ActiveTabIndex int       `json:"active_tab_index"`
+
+	// GitHub integration
+	Issue *GitHubIssue `json:"issue,omitempty"`
 
 	// Lifecycle
 	Archived   bool      `json:"archived"`

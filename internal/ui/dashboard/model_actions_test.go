@@ -91,8 +91,8 @@ func TestDashboardHandleEnterCreate(t *testing.T) {
 	}
 
 	msg := cmd()
-	if _, ok := msg.(messages.ShowCreateWorkspaceDialog); !ok {
-		t.Fatalf("expected ShowCreateWorkspaceDialog message, got %T", msg)
+	if _, ok := msg.(messages.ShowGitHubIssueDialog); !ok {
+		t.Fatalf("expected ShowGitHubIssueDialog message, got %T", msg)
 	}
 }
 

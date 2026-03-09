@@ -215,7 +215,7 @@ Commands:
   capabilities        Machine-readable CLI capabilities
   logs tail           Tail the tumuxi log file
   workspace list      List workspaces
-  workspace create    Create a workspace
+  workspace create    Create a workspace (--issue <N> links a GitHub issue)
   workspace remove    Remove a workspace
   agent list          List running agents
   agent capture       Capture agent pane output

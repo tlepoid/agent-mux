@@ -209,6 +209,18 @@ type ShowCreateWorkspaceDialog struct {
 	Project *data.Project
 }
 
+// ShowGitHubIssueDialog requests fetching open issues and showing a picker
+type ShowGitHubIssueDialog struct {
+	Project *data.Project
+}
+
+// GitHubIssuesLoaded is sent when the open issues list has been fetched
+type GitHubIssuesLoaded struct {
+	Project *data.Project
+	Issues  []*data.GitHubIssue
+	Err     error
+}
+
 // ShowDeleteWorkspaceDialog requests showing the delete workspace confirmation
 type ShowDeleteWorkspaceDialog struct {
 	Project   *data.Project
@@ -226,6 +238,7 @@ type CreateWorkspace struct {
 	Name      string
 	Base      string
 	Assistant string
+	Issue     *data.GitHubIssue // Optional linked GitHub issue
 }
 
 // DeleteWorkspace requests deleting a workspace

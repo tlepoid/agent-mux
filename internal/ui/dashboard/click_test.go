@@ -157,10 +157,10 @@ func TestMouseClickOnRows(t *testing.T) {
 			wantSelected: 3,
 		},
 		{
-			name:         "click Create button triggers ShowCreateWorkspaceDialog",
+			name:         "click Create button triggers ShowGitHubIssueDialog",
 			screenX:      5,
 			screenY:      5,
-			wantMsgType:  "ShowCreateWorkspaceDialog",
+			wantMsgType:  "ShowGitHubIssueDialog",
 			wantSelected: 4,
 		},
 	}
@@ -195,8 +195,8 @@ func TestMouseClickOnRows(t *testing.T) {
 				gotType = "ShowWelcome"
 			case messages.WorkspaceActivated:
 				gotType = "WorkspaceActivated"
-			case messages.ShowCreateWorkspaceDialog:
-				gotType = "ShowCreateWorkspaceDialog"
+			case messages.ShowGitHubIssueDialog:
+				gotType = "ShowGitHubIssueDialog"
 			default:
 				gotType = "unknown"
 			}

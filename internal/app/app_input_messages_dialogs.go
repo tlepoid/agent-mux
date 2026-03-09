@@ -77,6 +77,60 @@ func (a *App) handleShowRemoveProjectDialog(msg messages.ShowRemoveProjectDialog
 	a.dialog.Show()
 }
 
+// handleShowGitHubIssueDialog starts an async fetch of open GitHub issues.
+func (a *App) handleShowGitHubIssueDialog(msg messages.ShowGitHubIssueDialog) tea.Cmd {
+	a.dialogProject = msg.Project
+	return fetchGitHubIssuesCmd(msg.Project)
+}
+
+// handleGitHubIssuesLoaded shows the combined name-input + issue-list picker.
+// On error or when no issues exist, falls back to the regular name input dialog.
+func (a *App) handleGitHubIssuesLoaded(msg messages.GitHubIssuesLoaded) {
+	if msg.Project != nil {
+		a.dialogProject = msg.Project
+	}
+
+	if msg.Err != nil {
+		logging.Warn("Failed to fetch GitHub issues: %v", msg.Err)
+		// Fall back to plain name input so workspace creation still works.
+		a.showCreateWorkspaceNameDialog()
+		return
+	}
+
+	a.pendingGitHubIssues = msg.Issues
+
+	labels := make([]string, len(msg.Issues))
+	names := make([]string, len(msg.Issues))
+	for i, issue := range msg.Issues {
+		labels[i] = issueLabel(issue)
+		names[i] = issueWorkspaceName(issue)
+	}
+
+	a.dialog = common.NewIssuePicker(DialogGitHubIssue, "New Workspace", labels, names)
+	a.dialog.SetSize(a.width, a.height)
+	a.dialog.SetShowKeymapHints(a.config.UI.ShowKeymapHints)
+	a.dialog.Show()
+}
+
+// showCreateWorkspaceNameDialog shows the plain name-entry dialog used for blank workspaces.
+func (a *App) showCreateWorkspaceNameDialog() {
+	d := common.NewInputDialog(DialogCreateWorkspace, "Create Workspace", "Enter workspace name...")
+	d.SetInputValidate(func(s string) string {
+		s = validation.SanitizeInput(s)
+		if s == "" {
+			return ""
+		}
+		if err := validation.ValidateWorkspaceName(s); err != nil {
+			return err.Error()
+		}
+		return ""
+	})
+	d.SetSize(a.width, a.height)
+	d.SetShowKeymapHints(a.config.UI.ShowKeymapHints)
+	d.Show()
+	a.dialog = d
+}
+
 // handleShowSelectAssistantDialog shows the select assistant dialog.
 func (a *App) handleShowSelectAssistantDialog() {
 	if a.activeWorkspace == nil && a.pendingWorkspaceProject == nil {

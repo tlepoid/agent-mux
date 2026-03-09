@@ -72,7 +72,7 @@ func (s *workspaceService) AddProject(path string) tea.Cmd {
 }
 
 // CreateWorkspace creates a new workspace.
-func (s *workspaceService) CreateWorkspace(project *data.Project, name, base string, assistant ...string) tea.Cmd {
+func (s *workspaceService) CreateWorkspace(project *data.Project, name, base, assistant string, issue *data.GitHubIssue) tea.Cmd {
 	return func() (msg tea.Msg) {
 		var ws *data.Workspace
 		defer func() {
@@ -121,9 +121,9 @@ func (s *workspaceService) CreateWorkspace(project *data.Project, name, base str
 
 		workspacePath := ws.Root
 		branch := name
-		selectedAssistant := strings.TrimSpace(ws.Assistant)
-		if len(assistant) > 0 {
-			selectedAssistant = strings.TrimSpace(assistant[0])
+		selectedAssistant := strings.TrimSpace(assistant)
+		if selectedAssistant == "" {
+			selectedAssistant = strings.TrimSpace(ws.Assistant)
 		}
 		if selectedAssistant == "" {
 			return messages.WorkspaceCreateFailed{
@@ -138,6 +138,9 @@ func (s *workspaceService) CreateWorkspace(project *data.Project, name, base str
 			}
 		}
 		ws.Assistant = selectedAssistant
+		if issue != nil {
+			ws.Issue = issue
+		}
 
 		if !isManagedWorkspacePathForProject(s.workspacesRoot, project, workspacePath) {
 			return messages.WorkspaceCreateFailed{
@@ -160,6 +163,15 @@ func (s *workspaceService) CreateWorkspace(project *data.Project, name, base str
 			return messages.WorkspaceCreateFailed{
 				Workspace: ws,
 				Err:       err,
+			}
+		}
+
+		// Write ISSUE.md so the agent has issue context available.
+		if issue != nil && issue.Body != "" {
+			issueContent := fmt.Sprintf("# Issue #%d: %s\n\n%s\n\n---\n\n%s\n", issue.Number, issue.Title, issue.URL, issue.Body)
+			issuePath := filepath.Join(workspacePath, "ISSUE.md")
+			if err := os.WriteFile(issuePath, []byte(issueContent), 0o644); err != nil {
+				logging.Warn("Failed to write ISSUE.md: %v", err)
 			}
 		}
 

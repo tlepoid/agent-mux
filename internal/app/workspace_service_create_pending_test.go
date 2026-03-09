@@ -13,7 +13,7 @@ import (
 
 func TestCreateWorkspaceNilProjectReturnsFailed(t *testing.T) {
 	svc := newWorkspaceService(nil, nil, nil, "/tmp/workspaces")
-	cmd := svc.CreateWorkspace(nil, "feature", "main")
+	cmd := svc.CreateWorkspace(nil, "feature", "main", "", nil)
 	msg := cmd()
 	failed, ok := msg.(messages.WorkspaceCreateFailed)
 	if !ok {
@@ -30,7 +30,7 @@ func TestCreateWorkspaceNilProjectReturnsFailed(t *testing.T) {
 func TestCreateWorkspaceEmptyNameReturnsFailed(t *testing.T) {
 	project := data.NewProject("/tmp/repo")
 	svc := newWorkspaceService(nil, nil, nil, "/tmp/workspaces")
-	cmd := svc.CreateWorkspace(project, "  ", "main")
+	cmd := svc.CreateWorkspace(project, "  ", "main", "claude", nil)
 	msg := cmd()
 	failed, ok := msg.(messages.WorkspaceCreateFailed)
 	if !ok {
@@ -54,7 +54,7 @@ func TestCreateWorkspaceGitFailureIncludesPendingWorkspace(t *testing.T) {
 			return gitErr
 		},
 	}
-	cmd := svc.CreateWorkspace(project, "feature", "main")
+	cmd := svc.CreateWorkspace(project, "feature", "main", "claude", nil)
 	msg := cmd()
 	failed, ok := msg.(messages.WorkspaceCreateFailed)
 	if !ok {
@@ -85,7 +85,7 @@ func TestCreateWorkspaceEmptyBaseDefaultsToDefaultBranch(t *testing.T) {
 	// /tmp/repo is not a real git repo, so GetBaseBranch returns an error
 	// and the fallback to "HEAD" is used.
 	project := data.NewProject("/tmp/repo")
-	cmd := svc.CreateWorkspace(project, "feature", "")
+	cmd := svc.CreateWorkspace(project, "feature", "", "claude", nil)
 	msg := cmd()
 	failed, ok := msg.(messages.WorkspaceCreateFailed)
 	if !ok {
@@ -159,7 +159,7 @@ func TestCreateWorkspaceEmptyBaseResolvesToMainBranch(t *testing.T) {
 	}
 
 	project := data.NewProject(repo)
-	cmd := svc.CreateWorkspace(project, "feature", "")
+	cmd := svc.CreateWorkspace(project, "feature", "", "claude", nil)
 	cmd()
 
 	if capturedBase != "main" {
@@ -187,7 +187,7 @@ func TestCreateWorkspacePendingMatchesAppSidePath(t *testing.T) {
 	}
 
 	// Run CreateWorkspace and get the failure message
-	cmd := svc.CreateWorkspace(project, "feature", "main")
+	cmd := svc.CreateWorkspace(project, "feature", "main", "claude", nil)
 	msg := cmd()
 	failed, ok := msg.(messages.WorkspaceCreateFailed)
 	if !ok {
