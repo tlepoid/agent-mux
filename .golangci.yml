@@ -51,7 +51,6 @@ linters:
       require-explanation: true
       require-specific: true
     forbidigo:
-      analyze-types: true
       exclude-godoc-examples: true
       forbid:
         - p: ^print(ln)?$

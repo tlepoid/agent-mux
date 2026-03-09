@@ -42,7 +42,6 @@ linters:
       comparison: false
       errorf: true
     forbidigo:
-      analyze-types: true
       exclude-godoc-examples: true
       forbid:
         - p: ^print(ln)?$
