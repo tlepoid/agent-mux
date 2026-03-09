@@ -39,6 +39,9 @@ linters:
         - (io.Closer).Close
         - os.Remove
         - os.RemoveAll
+        - (*os.File).Close
+        - (*compress/gzip.Reader).Close
+        - (*github.com/tlepoid/tumuxi/internal/pty.Terminal).Close
     errorlint:
       asserts: false
       comparison: false
