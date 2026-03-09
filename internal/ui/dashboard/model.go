@@ -82,7 +82,8 @@ type Model struct {
 	spinnerActive      bool                       // Whether spinner ticks are active
 
 	// Agent activity state
-	activeWorkspaceIDs map[string]bool // Workspace IDs with active agents (synced from center)
+	activeWorkspaceIDs map[string]bool            // Workspace IDs with active agents (synced from center)
+	workspaceStatuses  map[string]common.AgentStatus // Per-workspace agent status (synced from center)
 
 	// Styles
 	styles common.Styles
@@ -97,6 +98,7 @@ func New() *Model {
 		creatingWorkspaces: make(map[string]*data.Workspace),
 		deletingWorkspaces: make(map[string]bool),
 		activeWorkspaceIDs: make(map[string]bool),
+		workspaceStatuses:  make(map[string]common.AgentStatus),
 		cursor:             0,
 		focused:            true,
 		styles:             common.DefaultStyles(),
@@ -106,6 +108,11 @@ func New() *Model {
 // SetActiveWorkspaces updates the set of workspaces with active agents.
 func (m *Model) SetActiveWorkspaces(active map[string]bool) {
 	m.activeWorkspaceIDs = active
+}
+
+// SetWorkspaceStatuses updates the per-workspace agent status for indicator rendering.
+func (m *Model) SetWorkspaceStatuses(statuses map[string]common.AgentStatus) {
+	m.workspaceStatuses = statuses
 }
 
 // InvalidateStatus marks a workspace's cached status stale.

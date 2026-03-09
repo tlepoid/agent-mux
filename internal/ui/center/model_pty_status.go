@@ -1,6 +1,7 @@
 package center
 
 import (
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 
 	"github.com/tlepoid/tumuxi/internal/logging"
 	"github.com/tlepoid/tumuxi/internal/perf"
+	"github.com/tlepoid/tumuxi/internal/ui/common"
 	"github.com/tlepoid/tumuxi/internal/ui/compositor"
 )
 
@@ -143,6 +145,119 @@ func (m *Model) isChatTab(tab *Tab) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// ConversationStatus represents the current visible status of a conversation tab.
+type ConversationStatus int
+
+const (
+	ConvStatusIdle    ConversationStatus = iota // ○ gray  - ready/disconnected
+	ConvStatusRunning                           // ● green  - actively working
+	ConvStatusWaiting                           // ◐ yellow - needs user input
+	ConvStatusError                             // ✕ red    - something went wrong
+)
+
+// TabConversationStatus returns the display status for a chat tab.
+func (m *Model) TabConversationStatus(tab *Tab) ConversationStatus {
+	if tab == nil || tab.isClosed() {
+		return ConvStatusIdle
+	}
+	if !m.isChatTab(tab) {
+		return ConvStatusIdle
+	}
+	tab.mu.Lock()
+	detached := tab.Detached
+	running := tab.Running
+	tab.mu.Unlock()
+
+	// Process stopped without the user detaching: treat as error.
+	if !running && !detached {
+		return ConvStatusError
+	}
+	// Detached or cleanly stopped: idle.
+	if !running || detached {
+		return ConvStatusIdle
+	}
+	// Recent visible output: running.
+	if m.IsTabActive(tab) {
+		return ConvStatusRunning
+	}
+	// Connected but quiet: check whether the terminal is waiting for input.
+	if m.tabIsWaiting(tab) {
+		return ConvStatusWaiting
+	}
+	return ConvStatusIdle
+}
+
+// tabIsWaiting returns true if the terminal cursor line looks like an input prompt.
+func (m *Model) tabIsWaiting(tab *Tab) bool {
+	tab.mu.Lock()
+	defer tab.mu.Unlock()
+	if tab.Terminal == nil {
+		return false
+	}
+	screen := tab.Terminal.Screen
+	cursorY := tab.Terminal.CursorY
+	if cursorY < 0 || cursorY >= len(screen) {
+		return false
+	}
+	var sb strings.Builder
+	for _, cell := range screen[cursorY] {
+		if cell.Rune != 0 {
+			sb.WriteRune(cell.Rune)
+		}
+	}
+	text := strings.TrimRight(sb.String(), " ")
+	return looksLikeInputPrompt(text)
+}
+
+// looksLikeInputPrompt returns true when text ends with a common user-input prompt pattern.
+func looksLikeInputPrompt(text string) bool {
+	if text == "" {
+		return false
+	}
+	lower := strings.ToLower(text)
+	for _, suffix := range []string{
+		"? ", "?", "> ", ">>> ", ">> ",
+		"[y/n]", "[y/n] ", "(y/n)", "(y/n) ",
+		"[yes/no]", "[yes/no] ",
+	} {
+		if strings.HasSuffix(lower, suffix) {
+			return true
+		}
+	}
+	return false
+}
+
+// GetWorkspaceStatuses returns the aggregate AgentStatus for each workspace ID.
+// When a workspace has multiple tabs the most prominent status wins:
+// Error > Waiting > Running > Idle.
+func (m *Model) GetWorkspaceStatuses() map[string]common.AgentStatus {
+	result := make(map[string]common.AgentStatus)
+	for wsID, tabs := range m.tabsByWorkspace {
+		best := common.AgentStatusIdle
+		for _, tab := range tabs {
+			s := convToAgentStatus(m.TabConversationStatus(tab))
+			if s > best {
+				best = s
+			}
+		}
+		result[wsID] = best
+	}
+	return result
+}
+
+func convToAgentStatus(s ConversationStatus) common.AgentStatus {
+	switch s {
+	case ConvStatusRunning:
+		return common.AgentStatusRunning
+	case ConvStatusWaiting:
+		return common.AgentStatusWaiting
+	case ConvStatusError:
+		return common.AgentStatusError
+	default:
+		return common.AgentStatusIdle
 	}
 }
 

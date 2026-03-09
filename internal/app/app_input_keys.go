@@ -23,6 +23,9 @@ func (a *App) syncActiveWorkspacesToDashboard() {
 		activeWorkspaces[wsID] = true
 	}
 	a.dashboard.SetActiveWorkspaces(activeWorkspaces)
+	if a.center != nil {
+		a.dashboard.SetWorkspaceStatuses(a.center.GetWorkspaceStatuses())
+	}
 }
 
 // handleKeyPress handles keyboard input
