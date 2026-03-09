@@ -151,9 +151,9 @@ func (m *Model) isChatTab(tab *Tab) bool {
 type ConversationStatus int
 
 const (
-	ConvStatusIdle    ConversationStatus = iota // ○ gray  - ready/disconnected
+	ConvStatusIdle    ConversationStatus = iota // ○ gray   - no session or session ended
 	ConvStatusRunning                           // ● green  - actively working
-	ConvStatusWaiting                           // ◐ yellow - needs user input
+	ConvStatusWaiting                           // ◐ yellow - session alive, needs attention
 	ConvStatusError                             // ✕ red    - something went wrong
 )
 
@@ -176,9 +176,11 @@ func (m *Model) TabConversationStatus(tab *Tab) ConversationStatus {
 	}
 	tab.mu.Unlock()
 
+	logging.Debug("TabConversationStatus tab=%s assistant=%s running=%v detached=%v session=%q", tab.ID, tab.Assistant, running, detached, sessionName)
+
 	switch {
 	case !running && !detached:
-		return ConvStatusError
+		return ConvStatusEnded
 	case running && !detached:
 		return ConvStatusWaiting // caller upgrades to Running when tmux says active
 	default:
@@ -188,7 +190,7 @@ func (m *Model) TabConversationStatus(tab *Tab) ConversationStatus {
 		if sessionName != "" {
 			return ConvStatusWaiting
 		}
-		return ConvStatusIdle
+		return ConvStatusEnded
 	}
 }
 
