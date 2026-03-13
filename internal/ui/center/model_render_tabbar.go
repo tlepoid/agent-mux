@@ -41,25 +41,45 @@ func (m *Model) renderTabBar() string {
 			name = tab.Assistant
 		}
 
-		// Check if tab is disconnected (detached or stopped)
-		tab.mu.Lock()
-		tabDisconnected := tab.Detached || !tab.Running
-		tab.mu.Unlock()
-
-		// Add brand color indicator for agent tabs (not file viewers)
+		// Determine conversation status for chat tabs
 		var indicator string
-		var tabActive bool
 		isChat := m.isChatTab(tab)
+		var status ConversationStatus
 		if isChat {
-			if tabDisconnected {
-				indicator = common.Icons.Idle + " " // Disconnected indicator
-			} else {
-				indicator = common.Icons.Running + " " // Brand color dot
+			status = m.TabConversationStatus(tab)
+			// Upgrade Waiting→Running when the tab has recent visible output.
+			if status == ConvStatusWaiting && m.IsTabActive(tab) {
+				status = ConvStatusRunning
 			}
-			tabActive = m.IsTabActive(tab)
+			switch status {
+			case ConvStatusRunning:
+				indicator = common.Icons.Running + " "
+			case ConvStatusWaiting:
+				indicator = common.Icons.Waiting + " "
+			case ConvStatusError:
+				indicator = common.Icons.Error + " "
+			default: // ConvStatusIdle
+				indicator = common.Icons.Idle + " "
+			}
 		}
 
 		agentStyle := lipgloss.NewStyle().Foreground(common.AgentColor(tab.Assistant))
+
+		// indicatorColor returns the status-appropriate foreground color for the indicator.
+		indicatorColor := func() interface {
+			RGBA() (uint32, uint32, uint32, uint32)
+		} {
+			switch status {
+			case ConvStatusRunning:
+				return common.AgentColor(tab.Assistant)
+			case ConvStatusWaiting:
+				return common.ColorWarning()
+			case ConvStatusError:
+				return common.ColorError()
+			default:
+				return common.ColorMuted()
+			}
+		}
 
 		// Build tab content with close affordance
 		closeLabel := m.styles.Muted.Render("×")
@@ -69,18 +89,21 @@ func (m *Model) renderTabBar() string {
 			// Active tab - each part styled with same background
 			bg := common.ColorSurface2()
 			pad := lipgloss.NewStyle().Background(bg).Render(" ")
-			// Use muted color for disconnected tabs
-			indicatorFg := agentStyle.GetForeground()
-			if tabDisconnected {
-				indicatorFg = common.ColorMuted()
-			}
-			indicatorPart := lipgloss.NewStyle().Foreground(indicatorFg).Background(bg).Render(indicator)
-			// Use primary color and bold when actively working, muted when disconnected
-			nameStyle := lipgloss.NewStyle().Foreground(common.ColorForeground()).Background(bg)
-			if tabDisconnected {
-				nameStyle = nameStyle.Foreground(common.ColorMuted())
-			} else if tabActive {
+			indicatorPart := lipgloss.NewStyle().Foreground(indicatorColor()).Background(bg).Render(indicator)
+			// Name color reflects status: running→primary+bold, waiting→warning, error→error, idle→muted
+			nameStyle := lipgloss.NewStyle().Background(bg)
+			switch status {
+			case ConvStatusRunning:
 				nameStyle = nameStyle.Foreground(common.ColorPrimary()).Bold(true)
+			case ConvStatusWaiting:
+				nameStyle = nameStyle.Foreground(common.ColorWarning())
+			case ConvStatusError:
+				nameStyle = nameStyle.Foreground(common.ColorError())
+			default:
+				nameStyle = nameStyle.Foreground(common.ColorMuted())
+			}
+			if !isChat {
+				nameStyle = nameStyle.Foreground(common.ColorForeground())
 			}
 			namePart := nameStyle.Render(name)
 			space := lipgloss.NewStyle().Background(bg).Render(" ")
@@ -88,22 +111,22 @@ func (m *Model) renderTabBar() string {
 			rendered = pad + indicatorPart + namePart + space + closePart + pad
 			style = m.styles.ActiveTab
 		} else {
-			// Inactive tab - muted with colored indicator, or primary color + bold when active
+			// Inactive tab
 			var nameStyled string
-			if tabDisconnected {
-				nameStyled = m.styles.Muted.Render(name)
-			} else if tabActive {
+			switch status {
+			case ConvStatusRunning:
 				nameStyled = lipgloss.NewStyle().Foreground(common.ColorPrimary()).Bold(true).Render(name)
-			} else {
+			case ConvStatusWaiting:
+				nameStyled = lipgloss.NewStyle().Foreground(common.ColorWarning()).Render(name)
+			case ConvStatusError:
+				nameStyled = lipgloss.NewStyle().Foreground(common.ColorError()).Render(name)
+			default:
 				nameStyled = m.styles.Muted.Render(name)
 			}
-			// Use muted indicator color for disconnected tabs
-			var indicatorStyled string
-			if tabDisconnected {
-				indicatorStyled = m.styles.Muted.Render(indicator)
-			} else {
-				indicatorStyled = agentStyle.Render(indicator)
+			if !isChat {
+				nameStyled = m.styles.Muted.Render(name)
 			}
+			indicatorStyled := lipgloss.NewStyle().Foreground(indicatorColor()).Render(indicator)
 			content := indicatorStyled + nameStyled + " " + closeLabel
 			rendered = m.styles.Tab.Render(content)
 			style = m.styles.Tab

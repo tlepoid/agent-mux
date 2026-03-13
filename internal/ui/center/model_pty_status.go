@@ -8,6 +8,7 @@ import (
 
 	"github.com/tlepoid/tumuxi/internal/logging"
 	"github.com/tlepoid/tumuxi/internal/perf"
+	"github.com/tlepoid/tumuxi/internal/ui/common"
 	"github.com/tlepoid/tumuxi/internal/ui/compositor"
 )
 
@@ -144,6 +145,107 @@ func (m *Model) isChatTab(tab *Tab) bool {
 	default:
 		return false
 	}
+}
+
+// ConversationStatus represents the current visible status of a conversation tab.
+type ConversationStatus int
+
+const (
+	ConvStatusIdle    ConversationStatus = iota // ○ gray   - no session or session ended
+	ConvStatusRunning                           // ● green  - actively working
+	ConvStatusWaiting                           // ◐ yellow - session alive, needs attention
+	ConvStatusError                             // ✕ red    - something went wrong
+)
+
+// TabConversationStatus returns the display status for a chat tab based on
+// process state alone. Callers with tmux activity data should upgrade
+// ConvStatusWaiting to ConvStatusRunning when tmux confirms recent output.
+func (m *Model) TabConversationStatus(tab *Tab) ConversationStatus {
+	if tab == nil || tab.isClosed() {
+		return ConvStatusIdle
+	}
+	if !m.isChatTab(tab) {
+		return ConvStatusIdle
+	}
+	tab.mu.Lock()
+	detached := tab.Detached
+	running := tab.Running
+	sessionName := tab.SessionName
+	if sessionName == "" && tab.Agent != nil {
+		sessionName = tab.Agent.Session
+	}
+	tab.mu.Unlock()
+
+	// Throttled diagnostic: log once per 5 seconds per tab to help debug unexpected ○ indicators.
+	now := time.Now()
+	if now.Sub(tab.lastStatusLogAt) >= 5*time.Second {
+		tab.lastStatusLogAt = now
+		logging.Info("TabConversationStatus tab=%s assistant=%s running=%v detached=%v session=%q", tab.ID, tab.Assistant, running, detached, sessionName)
+	}
+
+	switch {
+	case !running && !detached:
+		return ConvStatusIdle
+	case running && !detached:
+		return ConvStatusWaiting // caller upgrades to Running when tmux says active
+	default:
+		// detached=true: PTY dropped or user detached.
+		// If a tmux session name is known the session may still be alive and
+		// waiting for input — show Waiting so the user notices it.
+		if sessionName != "" {
+			return ConvStatusWaiting
+		}
+		return ConvStatusIdle
+	}
+}
+
+// GetWorkspaceStatuses returns the base AgentStatus for each workspace ID,
+// derived solely from tab process state (not screen-activity heuristics).
+//
+// Callers that also have tmux activity data should upgrade AgentStatusWaiting
+// to AgentStatusRunning when tmux confirms recent output in that workspace.
+// This two-signal approach avoids false "idle" readings caused by tmux
+// continuously refreshing the terminal with escape sequences.
+func (m *Model) GetWorkspaceStatuses() map[string]common.AgentStatus {
+	result := make(map[string]common.AgentStatus)
+	for wsID, tabs := range m.tabsByWorkspace {
+		best := common.AgentStatusIdle
+		for _, tab := range tabs {
+			if tab == nil || tab.isClosed() || !m.isChatTab(tab) {
+				continue
+			}
+			tab.mu.Lock()
+			running := tab.Running
+			detached := tab.Detached
+			sessionName := tab.SessionName
+			if sessionName == "" && tab.Agent != nil {
+				sessionName = tab.Agent.Session
+			}
+			tab.mu.Unlock()
+
+			var s common.AgentStatus
+			switch {
+			case !running && !detached:
+				s = common.AgentStatusIdle
+			case running && !detached:
+				s = common.AgentStatusWaiting // upgraded to Running by caller if tmux active
+			default:
+				// detached=true: PTY dropped or user detached.
+				// If a tmux session name is known the session may still be alive
+				// and waiting for input — show Waiting so the user notices it.
+				if sessionName != "" {
+					s = common.AgentStatusWaiting
+				} else {
+					s = common.AgentStatusIdle
+				}
+			}
+			if s > best {
+				best = s
+			}
+		}
+		result[wsID] = best
+	}
+	return result
 }
 
 // StartPTYReaders starts reading from all PTYs across all workspaces

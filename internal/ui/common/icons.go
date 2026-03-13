@@ -7,8 +7,10 @@ var Icons = struct {
 	Clean   string
 	Dirty   string
 	Running string
+	Waiting string
 	Idle    string
 	Pending string
+	Error   string
 
 	// Actions
 	Add    string
@@ -45,8 +47,10 @@ var Icons = struct {
 	Clean:   "✓",
 	Dirty:   "●",
 	Running: "●",
+	Waiting: "◐",
 	Idle:    "○",
 	Pending: "◌",
+	Error:   "✕",
 
 	// Actions
 	Add:    "+",

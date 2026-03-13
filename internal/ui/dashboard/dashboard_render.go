@@ -34,7 +34,6 @@ func (m *Model) renderRow(row Row, selected bool) string {
 		return style.Render("[tumuxi]")
 
 	case RowProject:
-		prefix := " "
 		status := ""
 		statusText := ""
 		dirty := false
@@ -67,6 +66,8 @@ func (m *Model) renderRow(row Row, selected bool) string {
 		}
 		style = applyDirtyForeground(style, dirty, active, selected)
 
+		prefix := " "
+
 		// Reserve space for delete icon to keep status aligned
 		deleteSlot := "   "
 		deleteSlotWidth := 3
@@ -93,7 +94,6 @@ func (m *Model) renderRow(row Row, selected bool) string {
 		return style.Render(prefix+name+deleteSlot) + status
 
 	case RowWorkspace:
-		unstyledPrefix := " "
 		styledPrefix := " "
 		name := row.Workspace.Name
 		status := ""
@@ -118,6 +118,15 @@ func (m *Model) renderRow(row Row, selected bool) string {
 			status = " " + statusText
 		}
 
+		// Status icon always at the left edge (1 char) so it's visible at any sidebar width.
+		// Upgrade Waiting→Running when tmux confirms recent output in this workspace.
+		agentStatus := m.workspaceStatuses[row.ActivityWorkspaceID]
+		if agentStatus == common.AgentStatusWaiting && m.activeWorkspaceIDs[row.ActivityWorkspaceID] {
+			agentStatus = common.AgentStatusRunning
+		}
+		iconStr := lipgloss.NewStyle().Foreground(common.AgentStatusColor(agentStatus)).Render(common.AgentStatusIcon(agentStatus))
+		iconWidth := lipgloss.Width(iconStr)
+
 		// Determine row style based on selection and active state
 		style := m.styles.WorkspaceRow
 		if selected {
@@ -136,8 +145,8 @@ func (m *Model) renderRow(row Row, selected bool) string {
 			deleteSlot = " " + common.Icons.Close + " "
 		}
 
-		// Truncate workspace name to fit within pane (width - border - padding - status - deleteSlot)
-		prefixWidth := lipgloss.Width(unstyledPrefix) + lipgloss.Width(styledPrefix)
+		// Truncate workspace name to fit within pane (width - border - padding - icon - status - deleteSlot)
+		prefixWidth := iconWidth + lipgloss.Width(styledPrefix)
 		maxNameWidth := m.width - 3 - lipgloss.Width(status) - deleteSlotWidth - prefixWidth - 1
 		if maxNameWidth > 0 && lipgloss.Width(name) > maxNameWidth {
 			runes := []rune(name)
@@ -149,10 +158,10 @@ func (m *Model) renderRow(row Row, selected bool) string {
 
 		// Track delete slot position for click detection
 		if selected {
-			m.deleteIconX = lipgloss.Width(unstyledPrefix) + lipgloss.Width(style.Render(styledPrefix+name))
+			m.deleteIconX = iconWidth + lipgloss.Width(style.Render(styledPrefix+name))
 		}
 
-		return unstyledPrefix + style.Render(styledPrefix+name+deleteSlot) + status
+		return iconStr + style.Render(styledPrefix+name+deleteSlot) + status
 
 	case RowCreate:
 		unstyledPrefix := " "
