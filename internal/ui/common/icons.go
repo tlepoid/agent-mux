@@ -4,13 +4,14 @@ package common
 // Uses Unicode characters with fallbacks for broad terminal support
 var Icons = struct {
 	// Status indicators
-	Clean   string
-	Dirty   string
-	Running string
-	Waiting string
-	Idle    string
-	Pending string
-	Error   string
+	Clean    string
+	Dirty    string
+	Running  string
+	Waiting  string
+	Idle     string
+	Pending  string
+	Error    string
+	Complete string
 
 	// Actions
 	Add    string
@@ -44,13 +45,14 @@ var Icons = struct {
 	Spinner []string
 }{
 	// Status indicators
-	Clean:   "✓",
-	Dirty:   "●",
-	Running: "●",
-	Waiting: "◐",
-	Idle:    "○",
-	Pending: "◌",
-	Error:   "✕",
+	Clean:    "✓",
+	Dirty:    "●",
+	Running:  "●",
+	Waiting:  "◐",
+	Idle:     "○",
+	Pending:  "◌",
+	Error:    "✕",
+	Complete: "✓",
 
 	// Actions
 	Add:    "+",

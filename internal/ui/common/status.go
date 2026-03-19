@@ -7,10 +7,11 @@ import "image/color"
 type AgentStatus int
 
 const (
-	AgentStatusIdle    AgentStatus = iota // ○ gray  - no agent or disconnected
-	AgentStatusRunning                    // ● green  - actively working
-	AgentStatusWaiting                    // ◐ yellow - needs user input
-	AgentStatusError                      // ✕ red    - something went wrong
+	AgentStatusIdle     AgentStatus = iota // ○ gray  - no agent or disconnected
+	AgentStatusRunning                     // ● green  - actively working
+	AgentStatusWaiting                     // ◐ yellow - needs user input
+	AgentStatusError                       // ✕ red    - something went wrong
+	AgentStatusComplete                    // ✓ info   - marked complete, awaiting review
 )
 
 // AgentStatusIcon returns the display icon for the given status.
@@ -22,6 +23,8 @@ func AgentStatusIcon(s AgentStatus) string {
 		return Icons.Waiting
 	case AgentStatusError:
 		return Icons.Error
+	case AgentStatusComplete:
+		return Icons.Complete
 	default:
 		return Icons.Idle
 	}
@@ -36,6 +39,8 @@ func AgentStatusColor(s AgentStatus) color.Color {
 		return ColorWarning()
 	case AgentStatusError:
 		return ColorError()
+	case AgentStatusComplete:
+		return ColorInfo()
 	default:
 		return ColorMuted()
 	}

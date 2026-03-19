@@ -280,6 +280,13 @@ func (m *Model) Update(msg tea.Msg) (*Model, tea.Cmd) {
 					tab.mu.Unlock()
 				}
 
+				// Clear complete mark on user interaction
+				tab.mu.Lock()
+				if tab.MarkedComplete {
+					tab.MarkedComplete = false
+				}
+				tab.mu.Unlock()
+
 				// Forward ALL keys to terminal (no Ctrl interceptions)
 				input := common.KeyToBytes(msg)
 				if len(input) > 0 {

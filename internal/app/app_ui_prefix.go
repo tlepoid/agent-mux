@@ -42,6 +42,7 @@ var prefixCommandTable = []prefixCommand{
 	{Sequence: []string{"t", "d"}, Desc: "detach tab", Action: "detach_tab"},
 	{Sequence: []string{"t", "r"}, Desc: "reattach tab", Action: "reattach_tab"},
 	{Sequence: []string{"t", "s"}, Desc: "restart tab", Action: "restart_tab"},
+	{Sequence: []string{"t", "c"}, Desc: "toggle complete", Action: "toggle_complete_tab"},
 }
 
 // Prefix mode helpers (leader key)
@@ -284,6 +285,14 @@ func (a *App) runPrefixAction(action string) tea.Cmd {
 			return a.center.RestartActiveTab()
 		case messages.PaneSidebarTerminal:
 			return a.sidebarTerminal.RestartActiveTab()
+		}
+		return nil
+	case "toggle_complete_tab":
+		if a.focusedPane != messages.PaneCenter {
+			return nil
+		}
+		if a.center.ToggleActiveTabComplete() {
+			return a.persistActiveWorkspaceTabs()
 		}
 		return nil
 	default:
