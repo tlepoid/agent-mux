@@ -1,7 +1,6 @@
 package common
 
 import (
-	"bufio"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,16 +33,14 @@ func omarchyThemeName() string {
 
 // parseColorsToml parses a simple key = "value" TOML file into a map.
 func parseColorsToml(path string) (map[string]string, error) {
-	f, err := os.Open(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
 
 	colors := make(map[string]string)
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
@@ -56,7 +53,7 @@ func parseColorsToml(path string) (map[string]string, error) {
 		val = strings.Trim(val, "\"")
 		colors[key] = val
 	}
-	return colors, scanner.Err()
+	return colors, nil
 }
 
 // blendColor blends two hex colors by the given ratio (0.0 = a, 1.0 = b).
