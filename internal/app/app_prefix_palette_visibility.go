@@ -36,9 +36,14 @@ func (a *App) prefixActionVisible(action string) bool {
 		default:
 			return a.center.HasTabs()
 		}
-	case "close_tab", "detach_tab", "reattach_tab", "restart_tab", "toggle_complete_tab":
+	case "close_tab", "detach_tab", "reattach_tab", "restart_tab":
 		if a.focusedPane == messages.PaneSidebarTerminal {
 			return true
+		}
+		return a.center.HasTabs()
+	case "toggle_complete_tab":
+		if a.focusedPane == messages.PaneDashboard {
+			return a.activeWorkspace != nil
 		}
 		return a.center.HasTabs()
 	default:

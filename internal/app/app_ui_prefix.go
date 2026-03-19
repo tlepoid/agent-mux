@@ -288,11 +288,19 @@ func (a *App) runPrefixAction(action string) tea.Cmd {
 		}
 		return nil
 	case "toggle_complete_tab":
-		if a.focusedPane != messages.PaneCenter {
-			return nil
-		}
-		if a.center.ToggleActiveTabComplete() {
-			return a.persistActiveWorkspaceTabs()
+		switch a.focusedPane {
+		case messages.PaneCenter:
+			if a.center.ToggleActiveTabComplete() {
+				return a.persistActiveWorkspaceTabs()
+			}
+		case messages.PaneDashboard:
+			if a.activeWorkspace == nil {
+				return nil
+			}
+			wsID := string(a.activeWorkspace.ID())
+			if a.center.ToggleWorkspaceComplete(wsID) {
+				return a.persistWorkspaceTabs(wsID)
+			}
 		}
 		return nil
 	default:

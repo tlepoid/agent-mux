@@ -305,6 +305,43 @@ func (m *Model) ToggleActiveTabComplete() bool {
 	return true
 }
 
+// ToggleWorkspaceComplete toggles the "complete" mark on all chat tabs in a workspace.
+// Returns true if any tabs were toggled.
+func (m *Model) ToggleWorkspaceComplete(wsID string) bool {
+	tabs := m.tabsByWorkspace[wsID]
+	if len(tabs) == 0 {
+		return false
+	}
+	// Determine the target state: if any tab is not complete, mark all complete.
+	// If all are already complete, unmark all.
+	allComplete := true
+	chatCount := 0
+	for _, tab := range tabs {
+		if tab == nil || tab.isClosed() || !m.isChatTab(tab) {
+			continue
+		}
+		chatCount++
+		tab.mu.Lock()
+		if !tab.MarkedComplete {
+			allComplete = false
+		}
+		tab.mu.Unlock()
+	}
+	if chatCount == 0 {
+		return false
+	}
+	newState := !allComplete
+	for _, tab := range tabs {
+		if tab == nil || tab.isClosed() || !m.isChatTab(tab) {
+			continue
+		}
+		tab.mu.Lock()
+		tab.MarkedComplete = newState
+		tab.mu.Unlock()
+	}
+	return true
+}
+
 // HasDiffViewer returns true if the active tab has a diff viewer.
 func (m *Model) HasDiffViewer() bool {
 	tabs := m.getTabs()
