@@ -37,16 +37,17 @@ func (m *Model) addDetachedTab(ws *data.Workspace, info data.TabInfo) {
 		ca = time.Now().Unix()
 	}
 	tab := &Tab{
-		ID:            generateTabID(),
-		Name:          displayName,
-		Assistant:     info.Assistant,
-		Workspace:     ws,
-		SessionName:   info.SessionName,
-		Detached:      true,
-		Running:       false,
-		Terminal:      term,
-		createdAt:     ca,
-		lastFocusedAt: time.Unix(ca, 0),
+		ID:             generateTabID(),
+		Name:           displayName,
+		Assistant:      info.Assistant,
+		Workspace:      ws,
+		SessionName:    info.SessionName,
+		Detached:       true,
+		Running:        false,
+		MarkedComplete: info.Status == "complete",
+		Terminal:       term,
+		createdAt:      ca,
+		lastFocusedAt:  time.Unix(ca, 0),
 	}
 	isChat := m.isChatTab(tab)
 	term.IgnoreCursorVisibilityControls = isChat
@@ -94,6 +95,7 @@ func (m *Model) addPlaceholderTab(ws *data.Workspace, info data.TabInfo) (TabID,
 		SessionName: sessionName,
 		Detached:    true,
 		Running:     false,
+		MarkedComplete: info.Status == "complete",
 		// Placeholder tabs are immediately queued for async reattach.
 		reattachInFlight: true,
 		Terminal:         term,

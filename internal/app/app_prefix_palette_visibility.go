@@ -41,6 +41,11 @@ func (a *App) prefixActionVisible(action string) bool {
 			return true
 		}
 		return a.center.HasTabs()
+	case "toggle_complete_tab":
+		if a.focusedPane == messages.PaneDashboard {
+			return a.activeWorkspace != nil
+		}
+		return a.center.HasTabs()
 	default:
 		return true
 	}

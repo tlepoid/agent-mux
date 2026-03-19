@@ -218,13 +218,16 @@ func (m *Model) GetTabsInfo() ([]data.TabInfo, int) {
 		tab.mu.Lock()
 		running := tab.Running
 		detached := tab.Detached
+		markedComplete := tab.MarkedComplete
 		sessionName := tab.SessionName
 		if sessionName == "" && tab.Agent != nil {
 			sessionName = tab.Agent.Session
 		}
 		tab.mu.Unlock()
 		status := "stopped"
-		if detached {
+		if markedComplete {
+			status = "complete"
+		} else if detached {
 			status = "detached"
 		} else if running {
 			status = "running"
@@ -251,13 +254,16 @@ func (m *Model) GetTabsInfoForWorkspace(wsID string) ([]data.TabInfo, int) {
 		tab.mu.Lock()
 		running := tab.Running
 		detached := tab.Detached
+		markedComplete := tab.MarkedComplete
 		sessionName := tab.SessionName
 		if sessionName == "" && tab.Agent != nil {
 			sessionName = tab.Agent.Session
 		}
 		tab.mu.Unlock()
 		status := "stopped"
-		if detached {
+		if markedComplete {
+			status = "complete"
+		} else if detached {
 			status = "detached"
 		} else if running {
 			status = "running"
@@ -278,6 +284,62 @@ func (m *Model) GetTabsInfoForWorkspace(wsID string) ([]data.TabInfo, int) {
 func (m *Model) HasWorkspaceState(wsID string) bool {
 	_, ok := m.tabsByWorkspace[wsID]
 	return ok
+}
+
+// ToggleActiveTabComplete toggles the "complete" mark on the active tab.
+// When marked complete, the tab shows a distinct status icon.
+// The mark is automatically cleared when the user sends input to the tab.
+func (m *Model) ToggleActiveTabComplete() bool {
+	tabs := m.getTabs()
+	activeIdx := m.getActiveTabIdx()
+	if len(tabs) == 0 || activeIdx >= len(tabs) {
+		return false
+	}
+	tab := tabs[activeIdx]
+	if tab == nil || tab.isClosed() || !m.isChatTab(tab) {
+		return false
+	}
+	tab.mu.Lock()
+	tab.MarkedComplete = !tab.MarkedComplete
+	tab.mu.Unlock()
+	return true
+}
+
+// ToggleWorkspaceComplete toggles the "complete" mark on all chat tabs in a workspace.
+// Returns true if any tabs were toggled.
+func (m *Model) ToggleWorkspaceComplete(wsID string) bool {
+	tabs := m.tabsByWorkspace[wsID]
+	if len(tabs) == 0 {
+		return false
+	}
+	// Determine the target state: if any tab is not complete, mark all complete.
+	// If all are already complete, unmark all.
+	allComplete := true
+	chatCount := 0
+	for _, tab := range tabs {
+		if tab == nil || tab.isClosed() || !m.isChatTab(tab) {
+			continue
+		}
+		chatCount++
+		tab.mu.Lock()
+		if !tab.MarkedComplete {
+			allComplete = false
+		}
+		tab.mu.Unlock()
+	}
+	if chatCount == 0 {
+		return false
+	}
+	newState := !allComplete
+	for _, tab := range tabs {
+		if tab == nil || tab.isClosed() || !m.isChatTab(tab) {
+			continue
+		}
+		tab.mu.Lock()
+		tab.MarkedComplete = newState
+		tab.mu.Unlock()
+	}
+	return true
 }
 
 // HasDiffViewer returns true if the active tab has a diff viewer.

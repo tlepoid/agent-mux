@@ -58,6 +58,8 @@ func (m *Model) renderTabBar() string {
 				indicator = common.Icons.Waiting + " "
 			case ConvStatusError:
 				indicator = common.Icons.Error + " "
+			case ConvStatusComplete:
+				indicator = common.Icons.Complete + " "
 			default: // ConvStatusIdle
 				indicator = common.Icons.Idle + " "
 			}
@@ -76,6 +78,8 @@ func (m *Model) renderTabBar() string {
 				return common.ColorWarning()
 			case ConvStatusError:
 				return common.ColorError()
+			case ConvStatusComplete:
+				return common.ColorInfo()
 			default:
 				return common.ColorMuted()
 			}
@@ -99,6 +103,8 @@ func (m *Model) renderTabBar() string {
 				nameStyle = nameStyle.Foreground(common.ColorWarning())
 			case ConvStatusError:
 				nameStyle = nameStyle.Foreground(common.ColorError())
+			case ConvStatusComplete:
+				nameStyle = nameStyle.Foreground(common.ColorInfo())
 			default:
 				nameStyle = nameStyle.Foreground(common.ColorMuted())
 			}
@@ -120,6 +126,8 @@ func (m *Model) renderTabBar() string {
 				nameStyled = lipgloss.NewStyle().Foreground(common.ColorWarning()).Render(name)
 			case ConvStatusError:
 				nameStyled = lipgloss.NewStyle().Foreground(common.ColorError()).Render(name)
+			case ConvStatusComplete:
+				nameStyled = lipgloss.NewStyle().Foreground(common.ColorInfo()).Render(name)
 			default:
 				nameStyled = m.styles.Muted.Render(name)
 			}

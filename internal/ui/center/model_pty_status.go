@@ -151,10 +151,11 @@ func (m *Model) isChatTab(tab *Tab) bool {
 type ConversationStatus int
 
 const (
-	ConvStatusIdle    ConversationStatus = iota // ○ gray   - no session or session ended
-	ConvStatusRunning                           // ● green  - actively working
-	ConvStatusWaiting                           // ◐ yellow - session alive, needs attention
-	ConvStatusError                             // ✕ red    - something went wrong
+	ConvStatusIdle     ConversationStatus = iota // ○ gray   - no session or session ended
+	ConvStatusRunning                            // ● green  - actively working
+	ConvStatusWaiting                            // ◐ yellow - session alive, needs attention
+	ConvStatusError                              // ✕ red    - something went wrong
+	ConvStatusComplete                           // ✓ info   - marked complete, awaiting review
 )
 
 // TabConversationStatus returns the display status for a chat tab based on
@@ -170,11 +171,16 @@ func (m *Model) TabConversationStatus(tab *Tab) ConversationStatus {
 	tab.mu.Lock()
 	detached := tab.Detached
 	running := tab.Running
+	markedComplete := tab.MarkedComplete
 	sessionName := tab.SessionName
 	if sessionName == "" && tab.Agent != nil {
 		sessionName = tab.Agent.Session
 	}
 	tab.mu.Unlock()
+
+	if markedComplete {
+		return ConvStatusComplete
+	}
 
 	// Throttled diagnostic: log once per 5 seconds per tab to help debug unexpected ○ indicators.
 	now := time.Now()
@@ -217,6 +223,7 @@ func (m *Model) GetWorkspaceStatuses() map[string]common.AgentStatus {
 			tab.mu.Lock()
 			running := tab.Running
 			detached := tab.Detached
+			markedComplete := tab.MarkedComplete
 			sessionName := tab.SessionName
 			if sessionName == "" && tab.Agent != nil {
 				sessionName = tab.Agent.Session
@@ -224,19 +231,23 @@ func (m *Model) GetWorkspaceStatuses() map[string]common.AgentStatus {
 			tab.mu.Unlock()
 
 			var s common.AgentStatus
-			switch {
-			case !running && !detached:
-				s = common.AgentStatusIdle
-			case running && !detached:
-				s = common.AgentStatusWaiting // upgraded to Running by caller if tmux active
-			default:
-				// detached=true: PTY dropped or user detached.
-				// If a tmux session name is known the session may still be alive
-				// and waiting for input — show Waiting so the user notices it.
-				if sessionName != "" {
-					s = common.AgentStatusWaiting
-				} else {
+			if markedComplete {
+				s = common.AgentStatusComplete
+			} else {
+				switch {
+				case !running && !detached:
 					s = common.AgentStatusIdle
+				case running && !detached:
+					s = common.AgentStatusWaiting // upgraded to Running by caller if tmux active
+				default:
+					// detached=true: PTY dropped or user detached.
+					// If a tmux session name is known the session may still be alive
+					// and waiting for input — show Waiting so the user notices it.
+					if sessionName != "" {
+						s = common.AgentStatusWaiting
+					} else {
+						s = common.AgentStatusIdle
+					}
 				}
 			}
 			if s > best {

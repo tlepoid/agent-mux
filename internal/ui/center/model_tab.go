@@ -46,6 +46,7 @@ type Tab struct {
 	closed            uint32
 	closing           uint32
 	Running           bool   // Whether the agent is actively running
+	MarkedComplete    bool   // Whether the user has marked this tab as complete
 	readerActive      bool   // Guard to ensure only one PTY read loop per tab
 	readerActiveState uint32 // Mirrors readerActive for lock-free atomic reads
 	// Buffer PTY output to avoid rendering partial screen updates.
