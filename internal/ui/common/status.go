@@ -1,6 +1,10 @@
 package common
 
-import "image/color"
+import (
+	"image/color"
+
+	"charm.land/lipgloss/v2"
+)
 
 // AgentStatus is the aggregated conversation status for a workspace,
 // derived from its tabs and used for dashboard display.
@@ -30,18 +34,28 @@ func AgentStatusIcon(s AgentStatus) string {
 	}
 }
 
+// Agent status colors remain constant across themes for consistent recognition.
+var (
+	colorStatusRunning  = lipgloss.Color("#98C379") // green
+	colorStatusWaiting  = lipgloss.Color("#E5C07B") // yellow
+	colorStatusError    = lipgloss.Color("#E06C75") // red
+	colorStatusComplete = lipgloss.Color("#61AFEF") // blue
+	colorStatusIdle     = lipgloss.Color("#5C6370") // gray
+)
+
 // AgentStatusColor returns the display color for the given status.
+// Colors are fixed across themes so status indicators are always recognizable.
 func AgentStatusColor(s AgentStatus) color.Color {
 	switch s {
 	case AgentStatusRunning:
-		return ColorSuccess()
+		return colorStatusRunning
 	case AgentStatusWaiting:
-		return ColorWarning()
+		return colorStatusWaiting
 	case AgentStatusError:
-		return ColorError()
+		return colorStatusError
 	case AgentStatusComplete:
-		return ColorInfo()
+		return colorStatusComplete
 	default:
-		return ColorMuted()
+		return colorStatusIdle
 	}
 }
